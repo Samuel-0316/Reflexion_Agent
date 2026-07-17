@@ -32,5 +32,8 @@ class AgentState(TypedDict, total=False):
     # ── Reflector — reducer appends automatically ────────────────────
     reflections: Annotated[list[str], operator.add]
 
+    # ── Token metrics — reducer appends automatically ─────────────────
+    token_usage: Annotated[list[dict], operator.add]
+
     # ── Final ────────────────────────────────────────────────────────
     final_output: str

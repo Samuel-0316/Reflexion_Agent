@@ -55,6 +55,7 @@ def _init_session_state() -> None:
         "final_state": None,
         "attempts": [],                # list of per-attempt snapshots for display
         "recent_runs": [],             # simple in-memory history
+        "pre_graph_tokens": [],        # tokens used outside the graph (clarifier UI, smart merge)
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -209,6 +210,57 @@ def _render_final(state: dict) -> None:
                 st.markdown(f"**{i}.** {r}")
 
 
+def _render_token_metrics(state: dict) -> None:
+    """Render a detailed token usage breakdown table."""
+    token_list = state.get("token_usage", [])
+    if not token_list:
+        return
+
+    total_in = sum(t.get("input_tokens", 0) for t in token_list)
+    total_out = sum(t.get("output_tokens", 0) for t in token_list)
+    total_all = sum(t.get("total_tokens", 0) for t in token_list)
+
+    # Node display names
+    node_labels = {
+        "clarifier": "🤔 Clarifier",
+        "actor_query": "🎯 Actor Query",
+        "actor_verdict": "💰 Actor Verdict",
+        "evaluator": "⚖️ Evaluator",
+        "reflector": "🔁 Reflector",
+        "smart_merge": "🧠 Smart Merge",
+    }
+
+    with st.expander(
+        f"📊 Token Metrics — {total_all:,} total tokens across {len(token_list)} LLM calls",
+        expanded=False,
+    ):
+        # Summary metrics row
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("⬇️ Input Tokens", f"{total_in:,}")
+        m2.metric("⬆️ Output Tokens", f"{total_out:,}")
+        m3.metric("Σ Total Tokens", f"{total_all:,}")
+        m4.metric("🔄 LLM Calls", str(len(token_list)))
+
+        st.markdown("---")
+        st.markdown("#### Per-Node Breakdown")
+
+        # Build table data
+        table_md = "| Node | Attempt | Input | Output | Total |\n"
+        table_md += "|:-----|:-------:|------:|-------:|------:|\n"
+        for t in token_list:
+            node_name = node_labels.get(t.get("node", ""), t.get("node", "unknown"))
+            attempt = t.get("attempt", 0)
+            attempt_str = f"#{attempt}" if attempt > 0 else "—"
+            inp = t.get("input_tokens", 0)
+            out = t.get("output_tokens", 0)
+            tot = t.get("total_tokens", 0)
+            table_md += f"| {node_name} | {attempt_str} | {inp:,} | {out:,} | {tot:,} |\n"
+
+        # Totals row
+        table_md += f"| **TOTAL** | | **{total_in:,}** | **{total_out:,}** | **{total_all:,}** |\n"
+        st.markdown(table_md)
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Smart product name merging
 # ═══════════════════════════════════════════════════════════════════
@@ -239,7 +291,14 @@ def _smart_merge_product(original: str, answers: list[str]) -> str:
             f"- 'iPad' + '10.9-inch WiFi 64GB' → 'Apple iPad 10.9-inch WiFi 64GB'\n\n"
             f"Output ONLY the clean product name, nothing else."
         )
-        result = _invoke_with_retry(llm, [HumanMessage(content=prompt)])
+        result, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)])
+        # Track smart merge tokens in session state
+        if usage:
+            st.session_state.pre_graph_tokens.append({
+                "node": "smart_merge",
+                "attempt": 0,
+                **usage,
+            })
         merged = result.strip().strip('"').strip("'")
         if merged:
             logger.info(f"   🧠 Smart merge: '{original}' + {answers} → '{merged}'")
@@ -262,6 +321,10 @@ def _run_agent_streaming(initial_state: dict, live_container) -> dict:
     last_eval_reason = None
     attempts_local: list[dict] = []
     event_count = 0
+    prev_token_count = 0  # track tokens seen so far for live updates
+
+    # Placeholder for live token counter
+    token_placeholder = live_container.empty()
 
     logger.info(f"🚀 Starting agent run for: {initial_state.get('product')}")
 
@@ -277,6 +340,21 @@ def _run_agent_streaming(initial_state: dict, live_container) -> dict:
                 f"has_eval={bool(final_state.get('eval_result'))} | "
                 f"eval={final_state.get('eval_result', '-')}"
             )
+
+            # ── Live token counter update ──────────────────────────
+            token_list = final_state.get("token_usage", [])
+            if len(token_list) > prev_token_count:
+                prev_token_count = len(token_list)
+                total_in = sum(t.get("input_tokens", 0) for t in token_list)
+                total_out = sum(t.get("output_tokens", 0) for t in token_list)
+                total_all = sum(t.get("total_tokens", 0) for t in token_list)
+                token_placeholder.markdown(
+                    f"📊 **Tokens** &nbsp;│&nbsp; "
+                    f"⬇️ In: **{total_in:,}** &nbsp;│&nbsp; "
+                    f"⬆️ Out: **{total_out:,}** &nbsp;│&nbsp; "
+                    f"Σ Total: **{total_all:,}** &nbsp;│&nbsp; "
+                    f"🔄 LLM Calls: **{len(token_list)}**"
+                )
 
             if final_state.get("clarification_questions"):
                 logger.warning("Clarifier re-triggered mid-run — breaking")
@@ -510,11 +588,16 @@ elif phase == "running":
             "reflections": [],
             "search_results": [],
             "sources": [],
+            "token_usage": [],
             # KEY FIX: pre-populate a sentinel so clarifier passes through
             "clarification_questions": [],
             # We track this ourselves so clarifier knows to skip
             "_clarification_done": True,
         }
+        # Carry over any pre-graph tokens (from smart merge, etc.)
+        if st.session_state.pre_graph_tokens:
+            initial_state["token_usage"] = list(st.session_state.pre_graph_tokens)
+            st.session_state.pre_graph_tokens = []
         logger.info(f"🎬 Launching graph.stream with product={initial_state['product']!r}")
         final_state = _run_agent_streaming(initial_state, live_container)
         st.session_state.final_state = final_state
@@ -553,9 +636,13 @@ elif phase == "done":
             st.session_state.clarification_questions = []
             st.session_state.clarification_answers = []
             st.session_state.clarify_round = 0
+            st.session_state.pre_graph_tokens = []
             st.rerun()
 
     _render_final(final_state)
+
+    # ── Token Metrics Breakdown ──────────────────────────────────
+    _render_token_metrics(final_state)
 
     st.markdown("---")
 
@@ -575,4 +662,5 @@ elif phase == "done":
         st.session_state.clarification_questions = []
         st.session_state.clarification_answers = []
         st.session_state.clarify_round = 0
+        st.session_state.pre_graph_tokens = []
         st.rerun()
