@@ -4,4 +4,5 @@ langchain-community
 langchain-core
 tavily-python
 python-dotenv
+langsmith
 streamlit

@@ -18,3 +18,6 @@ MAX_ATTEMPTS: int = int(os.getenv("MAX_ATTEMPTS", "3"))
 
 # ── Search ───────────────────────────────────────────────────────────
 MAX_SEARCH_RESULTS: int = int(os.getenv("MAX_SEARCH_RESULTS", "6"))
+
+# ── LangSmith ────────────────────────────────────────────────────────
+LANGCHAIN_PROJECT: str = os.getenv("LANGCHAIN_PROJECT", "price-check-reflexion-agent")

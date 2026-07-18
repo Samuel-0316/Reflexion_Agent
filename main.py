@@ -195,7 +195,7 @@ def _run_with_clarification(graph, initial_state: dict) -> dict:
         last_printed_state = None
         last_printed_attempt = 0
 
-        for event in graph.stream(state, stream_mode="values"):
+        for event in graph.stream(state, stream_mode="values", config={"run_name": f"PriceCheck: {state['product']}"}):
             final_state.update(event)
 
             # Check for clarification request (only meaningful on first round)
