@@ -92,3 +92,10 @@ def build_graph() -> StateGraph:
     graph.add_conditional_edges("reflector", _route_after_reflect)
 
     return graph.compile()
+
+
+def get_langfuse_config(run_name: str) -> dict:
+    """Helper to inject Langfuse callback for observability."""
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    return {"callbacks": [langfuse_handler], "run_name": run_name}

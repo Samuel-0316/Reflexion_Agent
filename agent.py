@@ -36,24 +36,16 @@ def _get_llm() -> ChatGroq:
     )
 
 
-def _invoke_with_retry(llm, messages, *, metadata: dict | None = None) -> tuple[str, dict]:
+def _invoke_with_retry(llm, messages) -> tuple[str, dict]:
     """Call the LLM with automatic retry on rate-limit (429) errors.
-
-    Args:
-        metadata: Optional dict of LangSmith metadata tags
-                  (e.g. node, attempt, product) for trace filtering.
 
     Returns:
         (content, usage_dict) where usage_dict has input_tokens,
         output_tokens, total_tokens.
     """
-    invoke_kwargs = {}
-    if metadata:
-        invoke_kwargs["config"] = {"metadata": metadata}
-
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = llm.invoke(messages, **invoke_kwargs)
+            response = llm.invoke(messages)
             usage = dict(response.usage_metadata) if response.usage_metadata else {}
             return response.content, usage
         except Exception as e:
@@ -65,7 +57,7 @@ def _invoke_with_retry(llm, messages, *, metadata: dict | None = None) -> tuple[
             else:
                 raise  # non-rate-limit error, let it bubble up
     # Final attempt — let any error propagate
-    response = llm.invoke(messages, **invoke_kwargs)
+    response = llm.invoke(messages)
     usage = dict(response.usage_metadata) if response.usage_metadata else {}
     return response.content, usage
 
@@ -146,9 +138,7 @@ def clarifier_node(state: dict) -> dict:
         f"- 'Sony WH-1000XM5' → is_specific=true, questions=[]"
     )
 
-    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)], metadata={
-        "node": "clarifier", "attempt": state.get("attempt", 0), "product": product,
-    })
+    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)])
     parsed = _parse_json(content)
 
     is_specific = bool(parsed.get("is_specific", True))
@@ -209,9 +199,7 @@ def actor_query_node(state: dict) -> dict:
         f"Output ONLY the search query text, no quotes, no explanation."
     )
 
-    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)], metadata={
-        "node": "actor_query", "attempt": attempt, "product": state["product"],
-    })
+    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)])
     query = content.strip().strip('"').strip("'")
 
     logger.info(f"🎯 Actor query (attempt {attempt}): {query!r}")
@@ -290,9 +278,7 @@ def actor_verdict_node(state: dict) -> dict:
         f"Be specific — cite actual INR prices and Indian retailers only."
     )
 
-    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)], metadata={
-        "node": "actor_verdict", "attempt": state.get("attempt", 0), "product": state["product"],
-    })
+    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)])
     parsed = _parse_json(content)
 
     raw_sources = parsed.get("sources", [])
@@ -378,9 +364,7 @@ def evaluator_node(state: dict) -> dict:
         f'}}'
     )
 
-    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)], metadata={
-        "node": "evaluator", "attempt": state.get("attempt", 0), "product": state["product"],
-    })
+    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)])
     parsed = _parse_json(content)
 
     logger.info(
@@ -442,9 +426,7 @@ def reflector_node(state: dict) -> dict:
         f"Output ONLY the critique text."
     )
 
-    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)], metadata={
-        "node": "reflector", "attempt": state.get("attempt", 0), "product": state["product"],
-    })
+    content, usage = _invoke_with_retry(llm, [HumanMessage(content=prompt)])
     critique = content.strip()
 
     # ── Deduplication: reject near-identical reflections ──────────────

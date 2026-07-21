@@ -9,7 +9,7 @@ from __future__ import annotations
 import streamlit as st
 
 from config import GROQ_API_KEY, MAX_ATTEMPTS as DEFAULT_MAX_ATTEMPTS
-from graph import build_graph
+from graph import build_graph, get_langfuse_config
 from state import AgentState
 import config  # so we can mutate MAX_ATTEMPTS at runtime
 
@@ -329,7 +329,7 @@ def _run_agent_streaming(initial_state: dict, live_container) -> dict:
     logger.info(f"🚀 Starting agent run for: {initial_state.get('product')}")
 
     try:
-        for event in graph.stream(initial_state, stream_mode="values", config={"run_name": f"PriceCheck: {initial_state.get('product', 'unknown')}"}):
+        for event in graph.stream(initial_state, stream_mode="values", config=get_langfuse_config(f"PriceCheck: {initial_state.get('product', 'unknown')}")):
             event_count += 1
             final_state.update(event)
 
@@ -423,7 +423,7 @@ def _check_clarification(product: str) -> tuple[list[str], dict]:
     }
 
     snapshot = initial_state.copy()
-    for event in graph.stream(initial_state, stream_mode="values", config={"run_name": f"Clarify: {product}"}):
+    for event in graph.stream(initial_state, stream_mode="values", config=get_langfuse_config(f"Clarify: {product}")):
         snapshot.update(event)
         if snapshot.get("clarification_questions"):
             # Clarifier decided it's ambiguous — stop here
