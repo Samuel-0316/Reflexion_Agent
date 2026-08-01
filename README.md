@@ -30,7 +30,7 @@ The core of the agent is a State Graph (built with LangGraph) that orchestrates 
 
 3. **Search Node (`search_node`)**:
    - **Role:** Web Search Execution via MCP.
-   - **Logic:** Calls the `search_prices` tool on the **MCP Server** over stdio transport. The MCP server in turn calls the Tavily Search API, sanitizes the query (removing unsupported boolean operators), and strictly filters results to Indian domains (e.g., `amazon.in`, `flipkart.com`, `croma.com`).
+   - **Logic:** Calls the `search_prices` tool on the **MCP Server** over stdio transport. The MCP server in turn calls the Tavily Search API with `country="india"` scoping to dynamically search across all Indian e-commerce marketplaces, official brand stores (`.in`), and specialty distributors.
 
 4. **Actor Verdict Node (`actor_verdict_node`)**:
    - **Role:** Data Extraction & Synthesis.
@@ -38,7 +38,7 @@ The core of the agent is a State Graph (built with LangGraph) that orchestrates 
 
 5. **Evaluator Node (`evaluator_node`)**:
    - **Role:** Strict Quality Assurance.
-   - **Logic:** Acts as an independent judge. It verifies that at least two independent Indian sources confirm the price for the *exact* product requested (preventing "product drift" where the agent accidentally fetches prices for a "Pro" model instead of a base model). 
+   - **Logic:** Acts as an independent judge. It verifies that either at least two independent Indian retailers OR one verified official brand store / specialty distributor (e.g. `headphonezone.in`) confirm the price for the *exact* product requested (preventing "product drift" where the agent accidentally fetches prices for a "Pro" model instead of a base model).
 
 6. **Reflector Node (`reflector_node`)**:
    - **Role:** Critical Feedback Generation.
@@ -188,7 +188,7 @@ mcp_client.py ──── stdio ────► mcp_server.py
     ◄──────── results ─────────────┘
 ```
 
-- **Server** (`mcp_server.py`): Standalone FastMCP server exposing `search_prices` tool. Filters to Indian e-commerce domains.
+- **Server** (`mcp_server.py`): Standalone FastMCP server exposing `search_prices` and `verify_merchant_authority` tools. Dynamically crawls Indian retail sites and mathematically verifies merchant authority.
 - **Client** (`mcp_client.py`): Spawns the server as a subprocess over stdio. Exposes `web_search()` with a synchronous interface.
 - **Transport**: stdio (local subprocess) — zero configuration needed.
 

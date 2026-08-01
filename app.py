@@ -313,6 +313,37 @@ def _smart_merge_product(original: str, answers: list[str]) -> str:
 # Core agent runner
 # ═══════════════════════════════════════════════════════════════════
 
+def _render_live_activity_feed(state: dict, placeholder):
+    """Render a clean, one-liner live status update in Streamlit."""
+    attempt = state.get("attempt", 1)
+    max_attempts = getattr(config, "MAX_ATTEMPTS", 4)
+    query = state.get("search_query", "")
+    results = state.get("search_results", [])
+    best_price = state.get("best_price", "")
+    sources = state.get("sources", [])
+    eval_result = state.get("eval_result", "")
+    eval_reason = state.get("eval_reason", "")
+
+    if not query:
+        status_text = "🧠 **Actor Query:** Formulating search query for Indian e-commerce..."
+    elif not results:
+        status_text = f"🔌 **MCP Server (`mcp_server.py`):** Calling tool `search_prices` over stdio → `{query}`"
+    elif not best_price:
+        status_text = f"💰 **Actor Verdict:** Extracting INR prices from **{len(results)}** retail listings..."
+    elif not eval_result:
+        if len(sources) == 1 and sources[0].get("url"):
+            status_text = f"🛡️ **MCP Verification:** Checking authority of single source `{sources[0].get('url', '')}`..."
+        else:
+            status_text = f"⚖️ **Evaluator Judge:** Checking candidate **{best_price}** against Indian market rubric..."
+    else:
+        icon = "🏁" if eval_result == "PASS" else "🤔"
+        status_text = f"{icon} **Evaluator Verdict:** **{eval_result}** — *{eval_reason[:80]}...*"
+
+    placeholder.markdown(
+        f"⏳ **Attempt {attempt}/{max_attempts}** &nbsp;│&nbsp; {status_text}"
+    )
+
+
 def _run_agent_streaming(initial_state: dict, live_container) -> dict:
     graph = build_graph()
     final_state = initial_state.copy()
@@ -323,8 +354,9 @@ def _run_agent_streaming(initial_state: dict, live_container) -> dict:
     event_count = 0
     prev_token_count = 0  # track tokens seen so far for live updates
 
-    # Placeholder for live token counter
+    # Placeholders for live progress & token counter
     token_placeholder = live_container.empty()
+    activity_placeholder = live_container.empty()
 
     logger.info(f"🚀 Starting agent run for: {initial_state.get('product')}")
 
@@ -340,6 +372,9 @@ def _run_agent_streaming(initial_state: dict, live_container) -> dict:
                 f"has_eval={bool(final_state.get('eval_result'))} | "
                 f"eval={final_state.get('eval_result', '-')}"
             )
+
+            # ── Live activity feed update (ChatGPT/Claude style) ───
+            _render_live_activity_feed(final_state, activity_placeholder)
 
             # ── Live token counter update ──────────────────────────
             token_list = final_state.get("token_usage", [])
@@ -385,6 +420,9 @@ def _run_agent_streaming(initial_state: dict, live_container) -> dict:
                 with live_container:
                     _render_attempt(snapshot, expanded=True)
 
+                if snapshot.get("eval_result") == "PASS" or current_attempt >= 4:
+                    activity_placeholder.empty()
+
     except Exception as e:
         logger.exception("Agent run crashed with exception")
         st.error(f"**Agent crashed:** `{type(e).__name__}: {e}`")
@@ -397,6 +435,7 @@ def _run_agent_streaming(initial_state: dict, live_container) -> dict:
         f"Final has best_price: {bool(final_state.get('best_price'))}"
     )
 
+    activity_placeholder.empty()
     if not attempts_local:
         st.warning("⚠️ **No attempts were captured.** ...")
         with st.expander("🔍 Debug: final state dump"):

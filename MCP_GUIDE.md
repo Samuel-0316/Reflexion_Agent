@@ -104,9 +104,10 @@ Here is the exact step-by-step architecture flow when our agent performs a searc
 
 #### A. `mcp_server.py` (The Server)
 - **Framework:** Built using Anthropic's official Python SDK (`mcp.server.fastmcp.FastMCP`).
-- **Tool Registration:** We register the function `search_prices(query: str, max_results: int = 6)` using the `@mcp.tool()` decorator.
-- **Domain Filtering:** It hardcodes a curated list of trusted Indian e-commerce domains:
-  - `amazon.in`, `flipkart.com`, `croma.com`, `reliancedigital.in`, `vijaysales.com`, `tatacliq.com`, `jiomart.com`, `nykaa.com`, `myntra.com`, `apple.com/in`, `samsung.com/in`, `store.google.com/in`.
+- **Tool Registration:** We register two specialized tools using the `@mcp.tool()` decorator:
+  - `search_prices(query: str, max_results: int = 6)`: Dynamic Indian retail price search via Tavily.
+  - `verify_merchant_authority(domain_or_url: str)`: Algorithmic domain authority verification returning a trust score and authoritative status.
+- **Dynamic Indian Web Scoping:** Instead of hardcoding a restrictive list of domains, it passes `country="india"` to Tavily's search API. This dynamically crawls all Indian e-commerce marketplaces (Amazon India, Flipkart, Croma), official Indian brand stores (`.in`), and specialty retailers (`headphonezone.in`, etc.) without artificial domain restrictions.
 - **JSON Serialization Guarantee:** To ensure clean compatibility across all clients, the server explicitly serializes its result into a valid **JSON string** (`json.dumps(...)`) rather than returning raw Python objects.
 
 #### B. `mcp_client.py` (The Client)

@@ -15,7 +15,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 
 from config import GROQ_API_KEY, MODEL_NAME
-from mcp_client import web_search
+from mcp_client import web_search, verify_merchant
 
 import logging
 logger = logging.getLogger("agent")
@@ -94,6 +94,7 @@ def clarifier_node(state: dict) -> dict:
         f"If it is vague, ambiguous, or refers to a product line/series/family, "
         f"you MUST flag it as not specific and ask clarifying questions.\n\n"
         f"A product name is TOO VAGUE if:\n"
+        f"- It is just a generic category without a brand or model (e.g. 'power bank', 'powerbank', 'laptop', 'earbuds', 'monitor')\n"
         f"- It is just a brand name (e.g. 'boAt headphones', 'Samsung phone')\n"
         f"- It is a product series/family without a model number "
         f"(e.g. 'boAt Rockerz', 'iPhone', 'Galaxy S', 'Noise ColorFit')\n"
@@ -107,6 +108,8 @@ def clarifier_node(state: dict) -> dict:
         f"- It is a product with only one variant on the market "
         f"(e.g. 'Kindle Paperwhite 2024')\n\n"
         f"STRICT RULES — DO NOT VIOLATE:\n"
+        f"0. If the product is a generic category without a brand or model (like 'power bank' or 'laptop'), "
+        f"ask which brand and specific capacity/model they want (e.g. 'Which brand and capacity of power bank? (e.g. Mi 10000mAh, Ambrane 20000mAh, Anker 10000mAh)').\n"
         f"1. If the product is a brand + generic category (like 'boAt headphones'), "
         f"ask which SPECIFIC model they want. Suggest popular models if you know them.\n"
         f"2. If the product is a series name (like 'boAt Rockerz'), "
@@ -125,6 +128,10 @@ def clarifier_node(state: dict) -> dict:
         f'  "questions": ["Short specific question with examples"]\n'
         f'}}\n\n'
         f"Examples:\n"
+        f"- 'power bank' → is_specific=false, "
+        f"questions=[\"Which brand and capacity of power bank? (e.g. Mi Power Bank 3i 10000mAh, Ambrane 20000mAh, Anker 10000mAh)\"]\n"
+        f"- 'powerbank' → is_specific=false, "
+        f"questions=[\"Which brand and capacity of power bank? (e.g. Mi Power Bank 3i 10000mAh, Ambrane 20000mAh, Anker 10000mAh)\"]\n"
         f"- 'boat headphones' → is_specific=false, "
         f"questions=[\"Which boAt headphone model? (e.g. Rockerz 450, "
         f"Rockerz 510, Airdopes 141, BassHeads 100)\"]\n"
@@ -334,7 +341,28 @@ def evaluator_node(state: dict) -> dict:
     """Check the Actor's price findings against the evidence-quality rubric."""
     llm = _get_llm()
 
-    sources_str = json.dumps(state.get("sources", []), indent=2, default=str)
+    sources = state.get("sources", [])
+    sources_str = json.dumps(sources, indent=2, default=str)
+
+    # ── Algorithmic Merchant Authority Verification (Secondary MCP Tool) ──
+    verification_block = ""
+    if len(sources) == 1 and sources[0].get("url"):
+        try:
+            ver = verify_merchant(sources[0]["url"])
+            logger.info(f"🛡️  Evaluator verification: {ver}")
+            if ver.get("authoritative") or ver.get("trust_score", 0) >= 0.8:
+                verification_block = (
+                    f"\n\n[🔍 ALGORITHMIC MERCHANT VERIFICATION REPORT]\n"
+                    f"- Cited Domain: {ver.get('domain', 'N/A')}\n"
+                    f"- Trust Score: {ver.get('trust_score')} ({ver.get('status', '')})\n"
+                    f"- Status: AUTHORITATIVE SINGLE SOURCE VERIFIED\n"
+                    f"- Reason: {ver.get('reason', '')}\n"
+                    f"→ ALGORITHMIC RULE OVERRIDE: Because this single source has been mathematically "
+                    f"verified by the verify_merchant_authority tool as an Authoritative Indian Store/Distributor, "
+                    f"ONE verified INR source is SUFFICIENT to PASS criterion #1.\n"
+                )
+        except Exception as e:
+            logger.warning(f"Merchant verification failed: {e}")
 
     prompt = (
         f"You are a strict evaluator for a price-finding agent in the INDIAN market.\n\n"
@@ -343,13 +371,15 @@ def evaluator_node(state: dict) -> dict:
         f"Best price found: {state.get('best_price', 'N/A')}\n"
         f"Price summary: {state.get('price_summary', 'N/A')}\n"
         f"Reasoning: {state.get('reasoning', 'N/A')}\n"
-        f"Sources cited:\n{sources_str}\n"
+        f"Sources cited:\n{sources_str}{verification_block}\n"
         f"Raw search results:\n{_format_results(state.get('search_results', []))}\n\n"
         f"Evaluate against ALL of these criteria:\n"
-        f"1. At least 2 independent Indian sources with actual INR prices\n"
+        f"1. **SOURCE REQUIREMENT**: Either:\n"
+        f"   (a) At least 2 independent Indian retailers with actual INR prices, OR\n"
+        f"   (b) 1 verified Indian source if it is an official brand website (.in), authorized Indian distributor, or recognized Indian specialty store (e.g. headphonezone.in for audiophile gear).\n"
         f"2. Sources are for the EXACT same product (not similar/variant/model)\n"
         f"3. All prices are in Indian Rupees (₹ / INR)\n"
-        f"4. Sources are Indian retailers (amazon.in, flipkart.com, croma.com, etc.)\n"
+        f"4. Sources are Indian retailers, official brand websites (.in), or authorized specialty stores (e.g. headphonezone.in)\n"
         f"5. Prices distinguish condition (new vs refurbished) if relevant\n"
         f"6. The 'best_price' claim is supported by the numbers\n"
         f"7. **PRODUCT DRIFT CHECK**: The 'refined product' must be a valid, "
@@ -415,9 +445,7 @@ def reflector_node(state: dict) -> dict:
         f"(a) A specific rewording of the search query "
         f"(e.g. 'try just <specific keywords>' — do NOT stuff more retailer names)\n"
         f"(b) A specific alternative interpretation of the product name\n"
-        f"(c) Accepting the best available data if scarcity is the issue "
-        f"(if 2+ attempts already found only 0-1 sources, the product may "
-        f"genuinely be unavailable on the Indian open web).\n\n"
+        f"(c) Suggesting to search specifically for authorized Indian distributors, official brand stores (.in), or specialty retailers if the product is a niche, luxury, or brand-exclusive item not sold on general marketplaces.\n\n"
         f"STRICT RULES:\n"
         f"- Do NOT suggest calling anyone, reading reports, or consulting studies.\n"
         f"- Do NOT invent model numbers not in '{state['product']}'.\n"

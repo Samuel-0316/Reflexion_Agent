@@ -116,3 +116,54 @@ def web_search(query: str, max_results: int | None = None) -> list[dict]:
             return future.result()
     else:
         return asyncio.run(_call_search_prices(query, max_results))
+
+
+async def _call_verify_merchant(domain_or_url: str) -> dict:
+    """Spawn the MCP server, call `verify_merchant_authority`, and return result dict."""
+    server_params = StdioServerParameters(
+        command=sys.executable,
+        args=[_SERVER_SCRIPT],
+        env={**os.environ},
+    )
+
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+
+            arguments: dict = {"domain_or_url": domain_or_url}
+            logger.info(f"🔌 MCP calling verify_merchant_authority({domain_or_url!r})")
+
+            result = await session.call_tool(
+                "verify_merchant_authority", arguments=arguments,
+            )
+
+            if result.isError or not result.content:
+                return {"domain": domain_or_url, "trust_score": 0.50, "authoritative": False, "status": "ERROR"}
+
+            text = result.content[0].text
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+            return {"domain": domain_or_url, "trust_score": 0.50, "authoritative": False, "status": "PARSE_ERROR"}
+
+
+def verify_merchant(domain_or_url: str) -> dict:
+    """Synchronous wrapper to verify merchant authority via the MCP server."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                asyncio.run, _call_verify_merchant(domain_or_url),
+            )
+            return future.result()
+    else:
+        return asyncio.run(_call_verify_merchant(domain_or_url))
+
