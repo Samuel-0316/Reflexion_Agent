@@ -191,3 +191,5 @@ mcp_client.py ──── stdio ────► mcp_server.py
 - **Server** (`mcp_server.py`): Standalone FastMCP server exposing `search_prices` tool. Filters to Indian e-commerce domains.
 - **Client** (`mcp_client.py`): Spawns the server as a subprocess over stdio. Exposes `web_search()` with a synchronous interface.
 - **Transport**: stdio (local subprocess) — zero configuration needed.
+
+> 📘 **Deep-Dive Guide:** For a complete technical walkthrough of the JSON-RPC schemas, stdio transport plumbing, execution timeline, and how to plug this server into **Claude Desktop** or **Cursor**, see the **[MCP Architecture & Technical Guide](./MCP_GUIDE.md)**.

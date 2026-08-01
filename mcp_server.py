@@ -8,6 +8,8 @@ Usage:
     python mcp_server.py
 """
 
+# MCP Inspector link: npx -y @modelcontextprotocol/inspector@latest python mcp_server.py
+
 from __future__ import annotations
 
 import json
