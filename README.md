@@ -4,8 +4,9 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agent-orange.svg)
 ![Streamlit](https://img.shields.io/badge/Streamlit-UI-red.svg)
 ![Groq](https://img.shields.io/badge/LLM-Groq-green.svg)
+![MCP](https://img.shields.io/badge/MCP-Server-purple.svg)
 
-A robust, self-reflecting AI agent designed to independently scour the Indian retail market for the absolute best product prices. Powered by **LangGraph** for structured state-machine workflows and **Groq** for high-speed inference, this agent employs a **Reflexion Loop**. Instead of just making one search, it critically evaluates its own findings—if it doesn't find sufficient evidence, it critiques itself, refines its search strategy, and tries again.
+A robust, self-reflecting AI agent designed to independently scour the Indian retail market for the absolute best product prices. Powered by **LangGraph** for structured state-machine workflows, **Groq** for high-speed inference, and **MCP (Model Context Protocol)** for modular tool integration, this agent employs a **Reflexion Loop**. Instead of just making one search, it critically evaluates its own findings—if it doesn't find sufficient evidence, it critiques itself, refines its search strategy, and tries again.
 
 ---
 
@@ -28,8 +29,8 @@ The core of the agent is a State Graph (built with LangGraph) that orchestrates 
    - **Logic:** Analyzes the product name (and any past failed reflections) to generate an exact, natural-language search query designed specifically for the Tavily backend. It targets Indian retail websites explicitly.
 
 3. **Search Node (`search_node`)**:
-   - **Role:** Web Search Execution.
-   - **Logic:** Calls the Tavily Search API. It sanitizes the query (removing unsupported boolean operators) and strictly filters results to Indian domains (e.g., `amazon.in`, `flipkart.com`, `croma.com`).
+   - **Role:** Web Search Execution via MCP.
+   - **Logic:** Calls the `search_prices` tool on the **MCP Server** over stdio transport. The MCP server in turn calls the Tavily Search API, sanitizes the query (removing unsupported boolean operators), and strictly filters results to Indian domains (e.g., `amazon.in`, `flipkart.com`, `croma.com`).
 
 4. **Actor Verdict Node (`actor_verdict_node`)**:
    - **Role:** Data Extraction & Synthesis.
@@ -52,10 +53,10 @@ The core of the agent is a State Graph (built with LangGraph) that orchestrates 
 | `agent.py` | Contains the core LLM logic. Houses all the node functions (`clarifier_node`, `actor_query_node`, `actor_verdict_node`, `evaluator_node`, `reflector_node`). Handles LLM retries and rate-limit backing off. |
 | `graph.py` | Wires the individual nodes from `agent.py` into a cohesive LangGraph `StateGraph`, defining the conditional edges and routing logic. |
 | `state.py` | Defines the `AgentState` schema using Python's `TypedDict`. This state dictionary is passed between nodes, tracking search results, attempt counters, and the reflection history. |
-| `search.py` | Contains the `web_search()` function. Manages the Tavily API client, sanitizes queries, and hardcodes the list of permissible Indian e-commerce domains. |
+| `mcp_server.py` | **MCP Server** — A standalone [FastMCP](https://github.com/modelcontextprotocol/python-sdk) server that exposes a `search_prices` tool. Manages the Tavily API client, sanitizes queries, and filters results to permissible Indian e-commerce domains. Runs over **stdio** transport. |
+| `mcp_client.py` | **MCP Client** — Spawns `mcp_server.py` as a subprocess and exposes a synchronous `web_search()` function that the agent nodes call. Handles async-to-sync bridging for compatibility with both CLI and Streamlit contexts. |
 | `config.py` | Loads environment variables using `python-dotenv`. Acts as the single source of truth for API keys, model selection, and global constants like `MAX_ATTEMPTS`. |
-| `app.py` | The rich, interactive **Streamlit** frontend. It manages a UI state machine (Input -> Clarify -> Running -> Done) and streams the agent's progress in real-time using expandable cards. |
-| `main.py` | The lightweight **CLI (Command Line Interface)**. Perfect for quick terminal checks or programmatic execution. Includes a colored pretty-printer for the terminal. |
+| `app.py` | The rich, interactive **Streamlit** frontend. It manages a UI state machine (Input → Clarify → Running → Done) and streams the agent's progress in real-time using expandable cards. |
 | `memory.py` | A simple, session-scoped memory class to hold the reflection trail. *(Resets every session by design).* |
 
 ---
@@ -87,6 +88,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Key dependencies include:
+- `langgraph`, `langchain-groq`, `langchain-core` — Agent orchestration & LLM
+- `mcp[cli]==1.24.0` — MCP server & client SDK (FastMCP)
+- `langchain-mcp-adapters==0.3.1` — LangChain ↔ MCP bridge
+- `tavily-python` — Web search API
+- `streamlit` — Interactive UI
+- `langfuse` — Observability
+
 ### 4. Environment Variables
 Create a file named `.env` in the root directory. Add your credentials:
 
@@ -105,27 +114,15 @@ MAX_SEARCH_RESULTS=6
 
 ## 💻 Usage Guide
 
-### 1. Streamlit Interactive Web UI (Recommended)
-Launch the beautiful browser-based UI, which streams the agent's internal thoughts and loops in real-time.
+### Streamlit Interactive Web UI
+Launch the browser-based UI, which streams the agent's internal thoughts and loops in real-time.
 
 ```bash
 streamlit run app.py
 ```
 *Navigate to `http://localhost:8501` in your browser.*
 
-### 2. Command Line Interface (CLI)
-Run searches quickly straight from your terminal.
-
-**Provide product as an argument:**
-```bash
-python main.py --product "boAt Rockerz 450"
-```
-
-**Interactive CLI mode:**
-```bash
-python main.py
-# The prompt will ask: Enter product name:
-```
+> **Note:** The MCP server (`mcp_server.py`) is spawned automatically as a subprocess by the client — no manual server startup is needed.
 
 ---
 
@@ -162,11 +159,35 @@ Use these sample queries to test the various capabilities of the Reflexion Agent
 1. **User asks for:** `"iPad"`
 2. **Clarifier steps in:** "Wait, iPad is ambiguous. Which size and connectivity?"
 3. **User clarifies:** `"10.9-inch WiFi 64GB"`
-4. **Attempt 1:** Actor searches for `iPad 10.9-inch WiFi 64GB price India`. 
-5. **Verdict 1:** Actor finds a price on Amazon, but no second source.
-6. **Evaluator:** FAILS the attempt (Rule: Needs at least 2 independent Indian sources).
-7. **Reflector:** Notes the failure and tells the Actor: "Try searching specifically on Flipkart or Croma to find a secondary source."
-8. **Attempt 2:** Actor searches for `Apple iPad 10.9-inch WiFi 64GB price Flipkart Croma`.
-9. **Verdict 2:** Finds prices on both Flipkart and Croma.
-10. **Evaluator:** PASSES the result.
-11. **Output:** The absolute best price is presented to the user!
+4. **Attempt 1:** Actor searches for `iPad 10.9-inch WiFi 64GB price India`.
+5. **MCP Search:** `mcp_client.py` spawns `mcp_server.py` → calls `search_prices` tool → Tavily API → returns results from Indian retailers.
+6. **Verdict 1:** Actor finds a price on Amazon, but no second source.
+7. **Evaluator:** FAILS the attempt (Rule: Needs at least 2 independent Indian sources).
+8. **Reflector:** Notes the failure and tells the Actor: "Try searching specifically on Flipkart or Croma to find a secondary source."
+9. **Attempt 2:** Actor searches for `Apple iPad 10.9-inch WiFi 64GB price Flipkart Croma`.
+10. **Verdict 2:** Finds prices on both Flipkart and Croma.
+11. **Evaluator:** PASSES the result.
+12. **Output:** The absolute best price is presented to the user!
+
+---
+
+## 🔌 MCP Architecture
+
+The search functionality is exposed via the **Model Context Protocol (MCP)**, enabling modular, tool-based integration.
+
+```
+agent.py (search_node)
+    │
+    ▼
+mcp_client.py ──── stdio ────► mcp_server.py
+    │                              │
+    │                              ▼
+    │                         Tavily API
+    │                         (Indian retailers)
+    │                              │
+    ◄──────── results ─────────────┘
+```
+
+- **Server** (`mcp_server.py`): Standalone FastMCP server exposing `search_prices` tool. Filters to Indian e-commerce domains.
+- **Client** (`mcp_client.py`): Spawns the server as a subprocess over stdio. Exposes `web_search()` with a synchronous interface.
+- **Transport**: stdio (local subprocess) — zero configuration needed.
