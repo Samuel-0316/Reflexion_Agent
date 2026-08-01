@@ -34,6 +34,8 @@ logger = logging.getLogger("mcp_server")
 AUTHORITATIVE_MARKETPLACES = {
     "amazon.in": "Amazon India Marketplace",
     "flipkart.com": "Flipkart Marketplace",
+    "ajio.com": "AJIO Fashion & Lifestyle (Reliance Retail)",
+    "meesho.com": "Meesho Indian Marketplace",
     "croma.com": "Croma Electronics",
     "reliancedigital.in": "Reliance Digital",
     "tatacliq.com": "Tata CLiQ Marketplace",
@@ -42,6 +44,13 @@ AUTHORITATIVE_MARKETPLACES = {
     "myntra.com": "Myntra Fashion & Lifestyle",
     "nykaa.com": "Nykaa Beauty & Tech",
     "snapdeal.com": "Snapdeal Marketplace",
+    "moglix.com": "Moglix Industrial & B2B Marketplace",
+    "toolbuy.com": "Toolbuy India Industrial Retailer",
+    "industrybuying.com": "IndustryBuying India",
+    "firstcry.com": "FirstCry India",
+    "pepperfry.com": "Pepperfry Furniture & Home",
+    "decathlon.in": "Decathlon Sports India",
+    "lenskart.com": "Lenskart India",
 }
 
 # Note: We do not hardcode specialty stores or brands. Instead, verify_merchant_authority
@@ -202,12 +211,18 @@ def verify_merchant_authority(domain_or_url: str) -> str:
         score += 0.15
         reasons.append("Valid D2C product/listing URL path structure")
 
-    # Specialty store / brand website keyword signal (+0.10)
-    store_keywords = ["audio", "sound", "store", "shop", "kart", "cart", "tech", "electronics", "retail", "buy", "mall", "lifestyle", "brand", "direct"]
+    # Specialty store / brand website / Indian e-commerce keyword signal (+0.35)
+    store_keywords = [
+        "ajio", "myntra", "nykaa", "meesho", "moglix", "toolbuy", "industrybuying", "firstcry",
+        "pepperfry", "decathlon", "lenskart", "shopclues", "paytm", "croma", "reliance", "tata",
+        "kart", "cart", "store", "shop", "mall", "deal", "sale", "buy", "bazaar", "market",
+        "retail", "mart", "audio", "sound", "tech", "electronics", "fashion", "wear", "lifestyle",
+        "brand", "direct", "express", "trade", "supply", "tool", "industrial", "headphone"
+    ]
     has_store_keyword = any(kw in host.lower() for kw in store_keywords)
     if has_store_keyword:
-        score += 0.10
-        reasons.append("Recognized retail/brand e-commerce indicator")
+        score += 0.35
+        reasons.append("Recognized Indian e-commerce / retail brand indicator")
 
     # Total trust evaluation
     score = min(round(score, 2), 0.95)
