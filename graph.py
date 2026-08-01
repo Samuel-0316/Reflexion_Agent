@@ -82,6 +82,7 @@ def build_graph() -> StateGraph:
 
 def get_langfuse_config(run_name: str) -> dict:
     """Helper to inject Langfuse callback for observability."""
+    # pyrefly: ignore [missing-import]
     from langfuse.langchain import CallbackHandler
     langfuse_handler = CallbackHandler()
     return {"callbacks": [langfuse_handler], "run_name": run_name}
