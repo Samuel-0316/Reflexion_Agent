@@ -15,7 +15,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 
 from config import GROQ_API_KEY, MODEL_NAME
-from search import web_search
+from mcp_client import web_search
 
 import logging
 logger = logging.getLogger("agent")
@@ -438,22 +438,11 @@ def reflector_node(state: dict) -> dict:
         )
         logger.info("   ⚠️ Duplicate reflection detected — using fallback")
 
-    # ── Detect if failure is due to product ambiguity ────────────────
-    eval_reason = state.get("eval_reason", "").lower()
-    drift_signals = ["product drift", "too broad", "encompasses multiple",
-                     "not a specific", "different product"]
-    is_ambiguity = any(sig in eval_reason for sig in drift_signals)
-    # +1 because we're about to add the current critique
-    needs_reclarify = is_ambiguity and (len(past_reflections) + 1) >= 2
-
     logger.info(f"🔁 Reflection: {critique[:120]}")
-    if needs_reclarify:
-        logger.info("   🔄 Flagging for re-clarification")
 
     # Return ONLY the new critique — operator.add reducer handles accumulation
     return {
         "reflections": [critique],
-        "needs_reclarification": needs_reclarify,
         "token_usage": [{
             "node": "reflector",
             "attempt": state.get("attempt", 0),

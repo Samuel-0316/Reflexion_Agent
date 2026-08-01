@@ -42,12 +42,8 @@ def _route_after_eval(state: dict) -> str:
 
 
 def _route_after_reflect(state: dict) -> str:
-    """Loop back to actor_query, stop early, or signal re-clarification."""
+    """Loop back to actor_query or stop when max attempts reached."""
     if state.get("attempt", 1) >= config.MAX_ATTEMPTS:
-        return END
-
-    # If reflector flagged ambiguity, stop the loop
-    if state.get("needs_reclarification"):
         return END
 
     # Early termination: if the last 2 attempts both had 0 sources, stop

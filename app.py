@@ -618,27 +618,6 @@ elif phase == "running":
 elif phase == "done":
     final_state = st.session_state.final_state or {}
 
-    if final_state.get("needs_reclarification"):
-        st.warning(
-            "### 🔄 Product Name Too Broad\n\n"
-            "The agent couldn't find reliable prices because the product name "
-            "is too broad or refers to a product family rather than a specific model. "
-            "Please try again with a **more specific product name** "
-            "(include the exact model number or variant)."
-        )
-        if st.button("🔍 Try again with a specific product", type="primary",
-                      use_container_width=True):
-            st.session_state.phase = "input"
-            st.session_state.product = ""
-            st.session_state.original_product = ""
-            st.session_state.attempts = []
-            st.session_state.final_state = None
-            st.session_state.clarification_questions = []
-            st.session_state.clarification_answers = []
-            st.session_state.clarify_round = 0
-            st.session_state.pre_graph_tokens = []
-            st.rerun()
-
     _render_final(final_state)
 
     # ── Token Metrics Breakdown ──────────────────────────────────

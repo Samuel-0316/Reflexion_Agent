@@ -10,7 +10,6 @@ class AgentState(TypedDict, total=False):
     original_product: str           # ← NEW: what the user first typed
     clarification_questions: list[str]  # ← NEW: questions to ask user (empty = no ambiguity)
     _clarification_done: bool
-    needs_reclarification: bool
 
     # ── Loop counter ─────────────────────────────────────────────────
     attempt: int
