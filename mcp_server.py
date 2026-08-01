@@ -44,21 +44,8 @@ AUTHORITATIVE_MARKETPLACES = {
     "snapdeal.com": "Snapdeal Marketplace",
 }
 
-VERIFIED_SPECIALTY_STORES = {
-    "headphonezone.in": "Headphone Zone India (Audiophile Specialty)",
-    "theaudiostore.in": "The Audio Store India (Audiophile Specialty)",
-    "conceptkart.com": "Concept Kart India (Audio & Tech Distributor)",
-    "apple.com": "Apple Official Store India",
-    "sony.co.in": "Sony Official India Store",
-    "samsung.com": "Samsung Official India Store",
-    "dyson.in": "Dyson Official India Store",
-    "nothing.tech": "Nothing Official India Store",
-    "oneplus.in": "OnePlus Official India Store",
-    "boat-lifestyle.com": "boAt Lifestyle India",
-    "mi.com": "Xiaomi / Mi Official India Store",
-    "realme.com": "Realme Official India Store",
-    "ouraring.com": "Oura Official Store",
-}
+# Note: We do not hardcode specialty stores or brands. Instead, verify_merchant_authority
+# uses dynamic algorithmic e-commerce heuristics (TLD, localization, URL paths, and retail signals).
 
 
 
@@ -187,36 +174,52 @@ def verify_merchant_authority(domain_or_url: str) -> str:
             }
             return json.dumps(res)
 
-    # 2. Verified Specialty or Brand Store
-    for domain, name in VERIFIED_SPECIALTY_STORES.items():
-        if host == domain or host.endswith("." + domain):
-            res = {
-                "domain": host,
-                "trust_score": 0.95,
-                "status": "VERIFIED_SPECIALTY_OR_BRAND_STORE",
-                "authoritative": True,
-                "reason": f"Verified Authoritative Indian Brand / Specialty Distributor ({name})",
-            }
-            return json.dumps(res)
+    # 2. Dynamic Algorithmic E-Commerce Authority Scoring (No hardcoded store lists!)
+    # Evaluates Indian TLD/localization, URL structure, and retail indicators.
+    score = 0.50
+    reasons = []
 
-    # 3. Dynamic Heuristic: Indian TLD (.in, .co.in, .org.in)
-    if host.endswith(".in") or host.endswith(".co.in") or host.endswith(".org.in"):
-        res = {
-            "domain": host,
-            "trust_score": 0.70,
-            "status": "GENERAL_INDIAN_MERCHANT",
-            "authoritative": False,
-            "reason": "Valid Indian domain TLD (.in), but general merchant requiring multi-source corroboration",
-        }
-        return json.dumps(res)
+    # Indian localization / domain TLD signal (+0.25)
+    is_indian_domain = (
+        host.endswith(".in")
+        or host.endswith(".co.in")
+        or host.endswith(".org.in")
+        or host.endswith(".net.in")
+        or "-india" in host
+        or "india." in host
+        or "/in/" in raw
+        or "/in-en/" in raw
+        or "en-in" in raw
+    )
+    if is_indian_domain:
+        score += 0.25
+        reasons.append("Indian domain TLD or regional e-commerce localization")
 
-    # 4. Unverified / Foreign
+    # Retail / E-commerce URL structure & product path signal (+0.15)
+    retail_paths = ["/product", "/p/", "/item/", "/buy", "/shop", "-price-", "/dp/"]
+    has_retail_path = any(p in raw.lower() for p in retail_paths)
+    if has_retail_path:
+        score += 0.15
+        reasons.append("Valid D2C product/listing URL path structure")
+
+    # Specialty store / brand website keyword signal (+0.10)
+    store_keywords = ["audio", "sound", "store", "shop", "kart", "cart", "tech", "electronics", "retail", "buy", "mall", "lifestyle", "brand", "direct"]
+    has_store_keyword = any(kw in host.lower() for kw in store_keywords)
+    if has_store_keyword:
+        score += 0.10
+        reasons.append("Recognized retail/brand e-commerce indicator")
+
+    # Total trust evaluation
+    score = min(round(score, 2), 0.95)
+    is_auth = (score >= 0.80)
+    status = "VERIFIED_SPECIALTY_OR_BRAND_STORE" if is_auth else "GENERAL_INDIAN_MERCHANT"
+
     res = {
         "domain": host,
-        "trust_score": 0.50,
-        "status": "UNVERIFIED_OR_FOREIGN_MERCHANT",
-        "authoritative": False,
-        "reason": "Unverified or non-Indian domain root",
+        "trust_score": score,
+        "status": status,
+        "authoritative": is_auth,
+        "reason": f"Algorithmic verification ({'; '.join(reasons) if reasons else 'Unverified domain root'})",
     }
     return json.dumps(res)
 
