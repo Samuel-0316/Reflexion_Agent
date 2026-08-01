@@ -46,16 +46,6 @@ def _route_after_reflect(state: dict) -> str:
     if state.get("attempt", 1) >= config.MAX_ATTEMPTS:
         return END
 
-    # Early termination: if the last 2 attempts both had 0 sources, stop
-    reflections = state.get("reflections", [])
-    if len(reflections) >= 2:
-        # Check if we've had repeat failures — this is a heuristic signal
-        # that more attempts won't help
-        last_reason = state.get("eval_reason", "").lower()
-        if "no prices" in last_reason or "0 sources" in last_reason:
-            # Give up: 0 results on a fail almost never recovers
-            return END
-
     return "actor_query"
 
 
