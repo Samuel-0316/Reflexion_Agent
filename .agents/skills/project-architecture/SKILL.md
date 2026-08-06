@@ -3,7 +3,7 @@ name: project-architecture
 description: |
   Complete architecture reference for the Price Check Reflexion Agent.
   Covers the file structure, module responsibilities, LangGraph state machine,
-  data flow between nodes, MCP client-server protocol, and Streamlit UI phases.
+  data flow between nodes, MCP client-server protocol, and FastAPI + HTML/Tailwind UI.
   Use this skill when working on any structural change, adding new nodes, or
   understanding how data flows through the system.
 ---
@@ -21,9 +21,13 @@ price_check_agent/
 ├── mcp_server.py      # FastMCP server — exposes search_prices & verify_merchant_authority tools over stdio
 ├── mcp_client.py      # MCP client — spawns mcp_server.py as subprocess, provides sync wrappers (web_search, verify_merchant)
 ├── memory.py          # Simple append-only ReflectionMemory class (currently unused by graph, kept for future use)
-├── app.py             # Streamlit UI — phase machine (input → clarify → running → done), live streaming, result rendering
+├── server.py          # FastAPI backend — REST endpoints + SSE streaming for live agent updates
+├── static/
+│   ├── index.html     # Frontend SPA — Tailwind CSS + vanilla JS, phase state machine, SSE consumer
+│   └── favicon.svg    # SVG favicon with gradient background
+├── app.py             # Legacy Streamlit UI — kept for reference, no longer the primary entrypoint
 ├── .env / .env.example # Environment variables (API keys, model config)
-├── requirements.txt   # Python dependencies
+├── requirements.txt   # Python dependencies (fastapi, uvicorn, sse-starlette, langchain, etc.)
 ├── README.md          # User-facing documentation
 ├── MCP_GUIDE.md       # Detailed MCP integration guide
 └── architecture_diagram.svg  # Visual architecture diagram
@@ -32,7 +36,7 @@ price_check_agent/
 ## Module Dependency Graph
 
 ```
-app.py
+server.py (FastAPI backend — primary entrypoint)
  ├── config.py (env vars, MAX_ATTEMPTS)
  ├── graph.py (build_graph, get_langfuse_config)
  │    ├── state.py (AgentState)
@@ -43,9 +47,12 @@ app.py
  │    │              └── tavily (external API)
  │    └── config.py (MAX_ATTEMPTS for routing)
  └── state.py (AgentState type for initial state construction)
+
+static/index.html (Frontend SPA — communicates with server.py via REST + SSE)
+ └── server.py API endpoints (GET/POST /api/*, GET /api/run SSE stream)
 ```
 
-**Key rule:** `agent.py` never imports from `app.py` or `graph.py`. `graph.py` never imports from `app.py`. Dependencies flow downward only.
+**Key rule:** `agent.py` never imports from `server.py` or `graph.py`. `graph.py` never imports from `server.py`. Dependencies flow downward only.
 
 ## AgentState Schema (state.py)
 
@@ -90,7 +97,7 @@ class AgentState(TypedDict, total=False):
 START
   │
   ▼
-clarifier ──(has questions)──► END  (app.py asks user, re-invokes with _clarification_done=True)
+clarifier ──(has questions)──► END  (server.py returns questions via /api/clarify, frontend asks user)
   │
   (no questions)
   ▼
@@ -124,7 +131,7 @@ agent.py (evaluator_node / search_node)
     ▼
 mcp_client.py (sync wrapper)
     │  web_search() / verify_merchant()
-    │  Uses asyncio + ThreadPoolExecutor for Streamlit compatibility
+    │  Uses asyncio + ThreadPoolExecutor for event loop compatibility
     ▼
 mcp_server.py (FastMCP over stdio)
     │  Tools: search_prices, verify_merchant_authority
@@ -135,13 +142,39 @@ Tavily API (external, country="india" scoping)
 
 **Key detail:** Each MCP call spawns a fresh subprocess. The server is stateless.
 
-## Streamlit UI Phase Machine (app.py)
+## FastAPI + HTML/Tailwind UI Architecture
+
+### Backend (server.py)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `GET /` | GET | Serves `static/index.html` |
+| `GET /api/config` | GET | Returns MAX_ATTEMPTS + API key status |
+| `POST /api/config` | POST | Updates `config.MAX_ATTEMPTS` at runtime |
+| `POST /api/clarify` | POST | Runs clarifier node, returns questions |
+| `POST /api/merge` | POST | Smart merges product name + answers |
+| `GET /api/run` | **SSE** | Streams the full reflexion loop in real-time |
+| `POST /api/reset` | POST | Resets server-side session state |
+| `GET /api/history` | GET | Returns recent runs list |
+| `GET /api/session` | GET | Returns debug session state |
+
+### Frontend (static/index.html)
 
 ```
 Phase 1: INPUT        → User types product name, submits form
 Phase 2: CLARIFY      → Agent asks clarification questions (multi-round, max 3 rounds)
-Phase 3: RUNNING      → Graph executes with live streaming status + token counter
+Phase 3: RUNNING      → SSE stream with live activity feed + token counter + attempt cards
 Phase 4: DONE         → Final result, attempt history, token metrics
 ```
 
-Each phase transition uses `st.session_state.phase = "..."` followed by `st.rerun()`.
+Phase transitions use `setPhase('new_phase')` in JavaScript, which toggles CSS visibility and re-triggers entry animations.
+
+### SSE Event Protocol (GET /api/run)
+
+```
+event: status    → {attempt, max_attempts, step, message}  (live activity feed)
+event: tokens    → {input_tokens, output_tokens, total_tokens, llm_calls}  (token counter)
+event: attempt   → {attempt state snapshot}  (attempt card)
+event: done      → {final_state, attempts}  (completion)
+event: error     → {error, traceback}  (crash)
+```

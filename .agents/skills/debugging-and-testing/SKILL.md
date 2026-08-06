@@ -3,7 +3,7 @@ name: debugging-and-testing
 description: |
   Common debugging techniques, testing commands, and troubleshooting patterns
   for the Price Check Reflexion Agent. Covers log interpretation, MCP debugging,
-  Streamlit session issues, LLM response parsing failures, and evaluation rubric tuning.
+  FastAPI/frontend issues, LLM response parsing failures, and evaluation rubric tuning.
   Use this skill when something breaks or behaves unexpectedly.
 ---
 
@@ -13,7 +13,7 @@ description: |
 
 ```bash
 # Syntax check all Python files
-python -m py_compile config.py state.py agent.py graph.py mcp_server.py mcp_client.py app.py memory.py
+python -m py_compile config.py state.py agent.py graph.py mcp_server.py mcp_client.py server.py memory.py
 
 # Test MCP server tool directly (no client, no subprocess)
 python -c "from mcp_server import search_prices; print(search_prices('iPhone 15 price India'))"
@@ -26,13 +26,18 @@ python -c "from mcp_client import verify_merchant; print(verify_merchant('headph
 # Test MCP with GUI inspector
 npx -y @modelcontextprotocol/inspector@latest python mcp_server.py
 
-# Run Streamlit
-streamlit run app.py
+# Run FastAPI server
+uvicorn server:app --reload --port 8000
+
+# Test API endpoints
+curl http://localhost:8000/api/config
+curl -X POST http://localhost:8000/api/clarify -H "Content-Type: application/json" -d "{\"product\": \"power bank\"}"
+curl -X POST http://localhost:8000/api/clarify -H "Content-Type: application/json" -d "{\"product\": \"Sony WH-1000XM5\"}"
 ```
 
 ## Log Interpretation
 
-All modules use Python's `logging` module. Logs go to stderr (visible in the terminal when running Streamlit).
+All modules use Python's `logging` module. Logs go to stderr (visible in the terminal when running uvicorn).
 
 ### Log Emoji Legend
 | Emoji | Source | Meaning |
@@ -45,12 +50,12 @@ All modules use Python's `logging` module. Logs go to stderr (visible in the ter
 | 🛡️ | agent.py / evaluator | Merchant verification called |
 | ⚖️ | agent.py / evaluator | Evaluation result |
 | 🔁 | agent.py / reflector | Reflection/critique generated |
-| 📍 | app.py | Current UI phase |
-| ➡️ | app.py | Phase transition |
-| 🎬 | app.py | Graph execution starting |
-| 🏁 | app.py | Graph execution complete |
+| ⚙️ | server.py | Config update (MAX_ATTEMPTS) |
+| 🎬 | server.py | SSE stream / graph execution starting |
+| 🏁 | server.py | Graph execution complete |
 | ⏳ | agent.py | Rate limit retry |
 | 🧹 | agent.py | Invalid sources filtered |
+| 🧠 | server.py | Smart merge result |
 | ⚠️ | various | Warning condition |
 | ❌ | various | Error condition |
 
@@ -61,20 +66,21 @@ All modules use Python's `logging` module. Logs go to stderr (visible in the ter
 **Cause:** The clarifier prompt lacks examples for that category.
 **Fix:** Add the category to the "TOO VAGUE" rules and examples in `clarifier_node()` in `agent.py`.
 
-### 2. Raw HTML Showing in Streamlit
-**Symptom:** `<div style="...">` text visible in the UI.
-**Cause:** Streamlit's markdown renderer treats indented HTML as code blocks.
-**Fix:** Use native Streamlit components only. Never use `unsafe_allow_html=True` with indented strings.
+### 2. SSE Stream Disconnects Prematurely
+**Symptom:** The live activity feed stops updating mid-run, or the frontend shows no result.
+**Cause:** The SSE connection timed out or the server crashed during `graph.stream()`.
+**Debug:** Check the uvicorn terminal for error logs. The frontend has a fallback — if it received attempt data before disconnect, it uses the last attempt as the final state.
+**Fix:** Check for exceptions in the terminal. Common cause is rate limiting (429) or MCP subprocess failures.
 
 ### 3. "Attempt 1/4" When Slider is Set to 3
 **Symptom:** Live feed shows wrong max attempts.
-**Cause:** Using a hardcoded value instead of `config.MAX_ATTEMPTS`.
-**Fix:** Always read from `getattr(config, "MAX_ATTEMPTS", 4)` dynamically.
+**Cause:** The `POST /api/config` call failed, or using a hardcoded value instead of `config.MAX_ATTEMPTS`.
+**Fix:** Always read from `getattr(config, "MAX_ATTEMPTS", 4)` dynamically in `server.py`. Check browser console for failed config API calls.
 
 ### 4. MCP "Event loop already running" Error
-**Symptom:** `RuntimeError: This event loop is already running` when calling MCP from Streamlit.
-**Cause:** Streamlit runs its own asyncio event loop.
-**Fix:** The `ThreadPoolExecutor` pattern in `mcp_client.py` handles this. Never call `asyncio.run()` directly in Streamlit context.
+**Symptom:** `RuntimeError: This event loop is already running` when calling MCP.
+**Cause:** MCP client's `asyncio.run()` called inside an already-running event loop.
+**Fix:** The `ThreadPoolExecutor` pattern in `mcp_client.py` handles this. In `server.py`, synchronous graph operations are run via `loop.run_in_executor()` to avoid blocking FastAPI's event loop.
 
 ### 5. LLM Returns Invalid JSON
 **Symptom:** `_parse_json()` returns `{}`, node gets empty/default values.
@@ -90,7 +96,7 @@ All modules use Python's `logging` module. Logs go to stderr (visible in the ter
 ### 7. Duplicate Reflections Causing Infinite Loop
 **Symptom:** Agent keeps generating the same critique and query.
 **Cause:** `_is_similar()` threshold too high, or LLM keeps suggesting similar strategies.
-**Debug:** Check the `reflections` list in the final state.
+**Debug:** Check the `reflections` list in the final state (use the debug panel in the sidebar or `GET /api/session`).
 **Fix:** Lower the `threshold` in `_is_similar()` (currently 0.7), or add more variety prompting in the reflector.
 
 ### 8. Rate Limiting (429 Errors)
@@ -99,20 +105,34 @@ All modules use Python's `logging` module. Logs go to stderr (visible in the ter
 **Config:** `MAX_RETRIES=3`, `BASE_WAIT=40` seconds in `agent.py`.
 **Fix:** Wait, upgrade API tier, or reduce `MAX_ATTEMPTS`.
 
-## Debugging Session State (Streamlit)
+### 9. CORS or Static File Issues
+**Symptom:** Frontend loads but API calls fail, or `index.html` returns 404.
+**Cause:** Static files mount path incorrect, or CORS headers missing.
+**Fix:** Ensure `server.py` mounts static files with `app.mount("/static", StaticFiles(directory="static"), name="static")`. The `/` route serves `index.html` directly, so no CORS issues for same-origin requests.
 
-The sidebar has a built-in debug panel:
-```
-🐛 Debug: session state
-├── phase: "running"
-├── product: "Sony WH-1000XM5"
-├── original_product: "Sony headphones"
-├── clarification_questions: []
-├── clarification_answers: ["WH-1000XM5"]
-└── n_attempts: 2
+## Debugging Session State
+
+### Backend Debug (API)
+Call `GET /api/session` to see the current server-side state:
+```json
+{
+    "phase": "running",
+    "product": "Sony WH-1000XM5",
+    "original_product": "Sony headphones",
+    "clarification_questions": [],
+    "clarification_answers": ["WH-1000XM5"],
+    "n_attempts": 2
+}
 ```
 
-If state gets corrupted, click "🔄 Reset session" in the sidebar.
+### Frontend Debug (Sidebar)
+The sidebar has a built-in debug panel (🐛 Debug button) that shows the JS `state` object as formatted JSON. If state gets corrupted, click "🔄 Reset session" in the sidebar — this calls `POST /api/reset` and resets the JS state.
+
+### Browser Console
+Open DevTools (F12) to see:
+- API request/response payloads in the Network tab
+- SSE event stream in the Network tab (filter by EventSource)
+- JavaScript errors in the Console tab
 
 ## Testing Specific Scenarios
 

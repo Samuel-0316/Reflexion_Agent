@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Price Check Reflexion Agent</title>
+    <meta name="description" content="Find the best Indian retail price for any product using a self-reflecting AI agent powered by LangGraph, Groq, and Tavily."/>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/>
+    <!-- Tailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                    colors: {
+                        surface: {
+                            50: '#f0f4ff',
+                            100: '#e0e8ff',
+                            800: '#141b2d',
+                            850: '#111827',
+                            900: '#0b1120',
+                            950: '#070d1a',
+                        },
+                        accent: {
+                            cyan: '#06b6d4',
+                            purple: '#8b5cf6',
+                            pink: '#ec4899',
+                        },
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out forwards',
+                        'slide-up': 'slideUp 0.4s ease-out forwards',
+                        'slide-down': 'slideDown 0.3s ease-out forwards',
+                        'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+                        'gradient-shift': 'gradientShift 3s ease infinite',
+                        'count-up': 'countUp 0.3s ease-out',
+                        'shimmer': 'shimmer 2s linear infinite',
+                        'bounce-in': 'bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        slideDown: {
+                            '0%': { opacity: '0', transform: 'translateY(-10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        pulseSoft: {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0.6' },
+                        },
+                        gradientShift: {
+                            '0%, 100%': { backgroundPosition: '0% 50%' },
+                            '50%': { backgroundPosition: '100% 50%' },
+                        },
+                        countUp: {
+                            '0%': { transform: 'scale(1.15)', opacity: '0.7' },
+                            '100%': { transform: 'scale(1)', opacity: '1' },
+                        },
+                        shimmer: {
+                            '0%': { backgroundPosition: '-200% 0' },
+                            '100%': { backgroundPosition: '200% 0' },
+                        },
+                        bounceIn: {
+                            '0%': { opacity: '0', transform: 'scale(0.3)' },
+                            '50%': { opacity: '1', transform: 'scale(1.05)' },
+                            '70%': { transform: 'scale(0.9)' },
+                            '100%': { transform: 'scale(1)' },
+                        },
+                    },
+                },
+            },
+        }
+    </script>
+    <!-- Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <style>
+        /* === Base === */
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: #070d1a;
+            overflow-x: hidden;
+        }
+
+        /* === Scrollbar === */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.5); }
+
+        /* === Glass Card === */
+        .glass {
+            background: rgba(20, 27, 45, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(139, 92, 246, 0.15);
+        }
+        .glass-light {
+            background: rgba(20, 27, 45, 0.45);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(6, 182, 212, 0.12);
+        }
+
+        /* === Gradient Border === */
+        .gradient-border {
+            position: relative;
+            border: none;
+        }
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(135deg, #06b6d4, #8b5cf6, #ec4899);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        /* === Animated Background === */
+        .bg-glow {
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 30%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 70%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* === Status Pulse === */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulseSoft 1.5s ease-in-out infinite;
+        }
+
+        /* === Accordion === */
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s ease-out, opacity 0.25s ease-out;
+            opacity: 0;
+        }
+        .accordion-content.open {
+            opacity: 1;
+        }
+
+        /* === Shimmer Skeleton === */
+        .skeleton {
+            background: linear-gradient(90deg,
+                rgba(139, 92, 246, 0.08) 25%,
+                rgba(6, 182, 212, 0.12) 50%,
+                rgba(139, 92, 246, 0.08) 75%
+            );
+            background-size: 200% 100%;
+            animation: shimmer 2s linear infinite;
+            border-radius: 8px;
+        }
+
+        /* === Source Card Hover === */
+        .source-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .source-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.15);
+        }
+
+        /* === Sidebar === */
+        .sidebar {
+            transition: transform 0.3s ease;
+        }
+        @media (max-width: 1023px) {
+            .sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                z-index: 50;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+        }
+
+        /* === Range Slider Custom === */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+            transition: transform 0.15s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+        }
+
+        /* === Badge === */
+        .badge-pass {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+        }
+        .badge-fail {
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+            color: white;
+        }
+
+        /* === Hide Phase === */
+        .phase-hidden { display: none !important; }
+
+        /* === Token Flash === */
+        .token-flash {
+            animation: countUp 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-gray-200 relative">
+
+    <!-- Background Glow -->
+    <div class="bg-glow"></div>
+
+    <!-- Mobile Sidebar Toggle -->
+    <button id="sidebarToggle" class="lg:hidden fixed top-4 left-4 z-[60] p-2 rounded-lg glass hover:bg-white/10 transition-colors"
+            onclick="toggleSidebar()">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+    </button>
+
+    <!-- Sidebar Overlay (mobile) -->
+    <div id="sidebarOverlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Layout Container -->
+    <div class="relative z-10 flex min-h-screen">
+
+        <!-- ═══════════ SIDEBAR ═══════════ -->
+        <aside id="sidebar" class="sidebar w-72 flex-shrink-0 glass border-r border-white/5 flex flex-col lg:relative">
+            <div class="p-5 flex-1 overflow-y-auto">
+
+                <!-- Logo -->
+                <div class="flex items-center gap-3 mb-7">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+                         style="background: linear-gradient(135deg, #06b6d4, #8b5cf6);">
+                        💰
+                    </div>
+                    <div>
+                        <h1 class="text-sm font-bold text-white">Price Check</h1>
+                        <p class="text-[10px] text-gray-400 font-medium tracking-wide">REFLEXION AGENT</p>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="mb-6">
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">⚙️ Settings</h3>
+                    <div class="glass-light rounded-xl p-4">
+                        <label class="text-xs text-gray-300 mb-2 block font-medium">
+                            Max reflexion attempts: <span id="maxAttemptsValue" class="text-accent-cyan font-bold">3</span>
+                        </label>
+                        <input type="range" id="maxAttemptsSlider" min="1" max="6" value="3"
+                               oninput="updateMaxAttempts(this.value)"/>
+                        <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                            <span>1</span>
+                            <span>6</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div class="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-5"></div>
+
+                <!-- Recent Runs -->
+                <div class="mb-6">
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">🕒 Recent Runs</h3>
+                    <div id="recentRuns" class="space-y-2">
+                        <p class="text-xs text-gray-500 italic">No runs yet.</p>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div class="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-5"></div>
+
+                <!-- Reset -->
+                <button onclick="resetSession()" id="resetBtn"
+                        class="w-full py-2.5 px-4 rounded-xl text-sm font-medium glass-light
+                               hover:bg-white/10 transition-all duration-200 flex items-center justify-center gap-2
+                               hover:border-red-500/30 group">
+                    <span class="group-hover:rotate-180 transition-transform duration-300">🔄</span>
+                    Reset session
+                </button>
+
+                <!-- Divider -->
+                <div class="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-5"></div>
+
+                <!-- Debug Panel -->
+                <div>
+                    <button onclick="toggleDebug()" class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2 w-full hover:text-gray-400 transition-colors">
+                        🐛 Debug
+                        <svg id="debugChevron" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div id="debugPanel" class="hidden">
+                        <pre id="debugContent" class="text-[10px] text-gray-500 bg-black/30 rounded-lg p-3 overflow-auto max-h-48 font-mono"></pre>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 border-t border-white/5">
+                <p class="text-[10px] text-gray-500 text-center">
+                    Powered by <span class="text-accent-cyan font-semibold">LangGraph</span> +
+                    <span class="text-accent-purple font-semibold">Groq</span> +
+                    <span class="text-accent-pink font-semibold">Tavily</span>
+                </p>
+            </div>
+        </aside>
+
+        <!-- ═══════════ MAIN CONTENT ═══════════ -->
+        <main class="flex-1 min-h-screen flex flex-col">
+
+            <!-- Header -->
+            <header class="px-6 pt-6 pb-4 lg:px-10 lg:pt-8">
+                <h1 class="text-2xl lg:text-3xl font-extrabold text-white mb-1">
+                    💰
+                    <span class="bg-clip-text text-transparent" style="background-image: linear-gradient(135deg, #06b6d4, #8b5cf6, #ec4899);">
+                        Price Check Reflexion Agent
+                    </span>
+                </h1>
+                <p class="text-sm text-gray-400">Find the best Indian retail price for any product using a self-reflecting AI agent.</p>
+            </header>
+
+            <!-- API Key Error Banner -->
+            <div id="apiKeyError" class="hidden mx-6 lg:mx-10 mb-4">
+                <div class="rounded-xl p-4 border border-red-500/30 bg-red-500/10 text-red-300 text-sm flex items-start gap-3">
+                    <span class="text-xl">🔑</span>
+                    <div>
+                        <p class="font-semibold mb-1">GROQ_API_KEY not set</p>
+                        <p>Open <code class="bg-black/30 px-1.5 py-0.5 rounded text-xs">.env</code> and add your Groq API key.
+                        Get one at <a href="https://console.groq.com/keys" target="_blank" class="text-red-400 underline hover:text-red-300">console.groq.com/keys</a>.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="flex-1 px-6 pb-10 lg:px-10">
+
+                <!-- ═══════ PHASE: INPUT ═══════ -->
+                <div id="phaseInput" class="max-w-2xl mx-auto mt-8 animate-fade-in">
+                    <div class="glass rounded-2xl gradient-border p-8">
+                        <div class="mb-6">
+                            <label for="productInput" class="block text-sm font-semibold text-gray-300 mb-2">Product name</label>
+                            <input type="text" id="productInput"
+                                   placeholder="e.g. iPhone 15 128GB, boAt Rockerz 450, Sony WH-1000XM5"
+                                   class="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white
+                                          placeholder-gray-500 focus:outline-none focus:border-accent-cyan/50
+                                          focus:ring-2 focus:ring-accent-cyan/20 transition-all duration-200 text-sm"
+                                   onkeydown="if(event.key==='Enter')submitProduct()"/>
+                            <p class="text-xs text-gray-500 mt-2">If ambiguous, the agent will ask you to clarify.</p>
+                        </div>
+                        <button onclick="submitProduct()" id="submitBtn"
+                                class="w-full py-3.5 rounded-xl font-semibold text-white text-sm
+                                       transition-all duration-300 hover:scale-[1.02] hover:shadow-lg
+                                       hover:shadow-cyan-500/20 active:scale-[0.98]
+                                       disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                                style="background: linear-gradient(135deg, #06b6d4, #8b5cf6);">
+                            <span id="submitBtnText">🔍 Find Best Price</span>
+                            <span id="submitBtnSpinner" class="hidden">
+                                <svg class="animate-spin inline w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                </svg>
+                                Checking...
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ═══════ PHASE: CLARIFY ═══════ -->
+                <div id="phaseClarify" class="phase-hidden max-w-2xl mx-auto mt-8 animate-slide-up">
+                    <div class="glass rounded-2xl p-8">
+                        <!-- Info banner -->
+                        <div id="clarifyBanner" class="rounded-xl p-4 mb-6 border border-cyan-500/20 bg-cyan-500/5 text-cyan-300 text-sm flex items-start gap-3">
+                            <span class="text-xl">🤔</span>
+                            <div>
+                                <p class="font-semibold mb-1" id="clarifyBannerTitle">The product name is a bit ambiguous.</p>
+                                <p class="text-cyan-400/80" id="clarifyBannerSub">Please clarify for the most accurate price.</p>
+                            </div>
+                        </div>
+
+                        <!-- Product display -->
+                        <div class="mb-5">
+                            <span class="text-xs text-gray-500 font-medium">Product:</span>
+                            <code id="clarifyProductName" class="ml-2 bg-black/30 px-2 py-1 rounded text-xs text-white font-mono"></code>
+                        </div>
+
+                        <!-- Question fields (dynamically injected) -->
+                        <div id="clarifyQuestions" class="space-y-4 mb-6"></div>
+
+                        <!-- Buttons -->
+                        <div class="flex gap-3">
+                            <button onclick="submitClarification(false)" id="clarifySubmitBtn"
+                                    class="flex-1 py-3 rounded-xl font-semibold text-white text-sm
+                                           transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
+                                           disabled:opacity-50 disabled:cursor-not-allowed"
+                                    style="background: linear-gradient(135deg, #06b6d4, #8b5cf6);">
+                                ✅ Continue
+                            </button>
+                            <button onclick="submitClarification(true)"
+                                    class="flex-1 py-3 rounded-xl font-medium text-gray-300 text-sm
+                                           glass-light hover:bg-white/10 transition-all duration-200
+                                           hover:scale-[1.02] active:scale-[0.98]">
+                                ⏭️ Skip clarification
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════ PHASE: RUNNING ═══════ -->
+                <div id="phaseRunning" class="phase-hidden max-w-4xl mx-auto mt-8 animate-slide-up">
+
+                    <!-- Running header -->
+                    <div class="mb-6">
+                        <h2 class="text-xl font-bold text-white mb-1">
+                            🔎 Searching for: <code id="runningProductName" class="bg-black/30 px-2 py-1 rounded text-accent-cyan font-mono text-lg"></code>
+                        </h2>
+                        <p class="text-sm text-gray-400">
+                            Max attempts: <span id="runningMaxAttempts" class="font-semibold text-gray-300"></span>
+                            <span id="runningClarifications" class="ml-3 hidden text-gray-500"></span>
+                        </p>
+                    </div>
+
+                    <div class="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-6"></div>
+
+                    <!-- Live Token Counter -->
+                    <div id="liveTokenBar" class="glass-light rounded-xl p-4 mb-4 hidden">
+                        <div class="flex flex-wrap items-center gap-4 text-sm">
+                            <span class="text-gray-400 font-medium">📊 Tokens</span>
+                            <div class="h-4 w-px bg-white/10"></div>
+                            <span>⬇️ In: <strong id="liveTokenIn" class="text-white">0</strong></span>
+                            <div class="h-4 w-px bg-white/10"></div>
+                            <span>⬆️ Out: <strong id="liveTokenOut" class="text-white">0</strong></span>
+                            <div class="h-4 w-px bg-white/10"></div>
+                            <span>Σ Total: <strong id="liveTokenTotal" class="text-accent-cyan">0</strong></span>
+                            <div class="h-4 w-px bg-white/10"></div>
+                            <span>🔄 LLM Calls: <strong id="liveLLMCalls" class="text-white">0</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Live Activity Feed -->
+                    <div id="liveActivityBar" class="glass rounded-xl p-4 mb-6 border-l-4 border-accent-cyan hidden">
+                        <div class="flex items-center gap-3">
+                            <div class="status-dot bg-accent-cyan"></div>
+                            <span id="liveActivityText" class="text-sm text-gray-200"></span>
+                        </div>
+                    </div>
+
+                    <!-- Spinner -->
+                    <div id="runningSpinner" class="text-center py-8">
+                        <div class="inline-flex items-center gap-3 text-gray-400">
+                            <svg class="animate-spin w-6 h-6 text-accent-cyan" viewBox="0 0 24 24" fill="none">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span class="text-sm">Running reflexion loop... this may take 30–90 seconds</span>
+                        </div>
+                    </div>
+
+                    <!-- Live Attempt Cards (injected here) -->
+                    <div id="liveAttempts" class="space-y-4"></div>
+                </div>
+
+                <!-- ═══════ PHASE: DONE ═══════ -->
+                <div id="phaseDone" class="phase-hidden max-w-4xl mx-auto mt-8 animate-slide-up">
+
+                    <!-- Final Result Panel -->
+                    <div id="finalResultPanel"></div>
+
+                    <!-- Token Metrics -->
+                    <div id="tokenMetrics" class="mt-6"></div>
+
+                    <!-- Divider -->
+                    <div class="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-6"></div>
+
+                    <!-- Attempt History -->
+                    <div id="attemptHistory"></div>
+
+                    <!-- Divider -->
+                    <div class="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-6"></div>
+
+                    <!-- Search Another -->
+                    <button onclick="searchAnother()"
+                            class="w-full py-3.5 rounded-xl font-semibold text-white text-sm
+                                   transition-all duration-300 hover:scale-[1.02] hover:shadow-lg
+                                   hover:shadow-cyan-500/20 active:scale-[0.98]"
+                            style="background: linear-gradient(135deg, #06b6d4, #8b5cf6);">
+                        🔍 Search another product
+                    </button>
+                </div>
+
+                <!-- ═══════ ERROR PANEL ═══════ -->
+                <div id="errorPanel" class="phase-hidden max-w-2xl mx-auto mt-8 animate-slide-up">
+                    <div class="rounded-2xl p-6 border border-red-500/30 bg-red-500/5">
+                        <div class="flex items-start gap-3 mb-4">
+                            <span class="text-2xl">💥</span>
+                            <div>
+                                <p class="text-red-300 font-semibold text-lg">Agent crashed</p>
+                                <p id="errorMessage" class="text-red-400 text-sm mt-1 font-mono"></p>
+                            </div>
+                        </div>
+                        <button onclick="toggleErrorTrace()" class="text-xs text-red-400/70 hover:text-red-300 transition-colors flex items-center gap-1 mb-2">
+                            <svg id="errorTraceChevron" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                            Full traceback
+                        </button>
+                        <pre id="errorTraceback" class="hidden text-[10px] text-red-400/60 bg-black/40 rounded-lg p-4 overflow-auto max-h-64 font-mono whitespace-pre-wrap"></pre>
+                        <button onclick="searchAnother()" class="mt-4 w-full py-2.5 rounded-xl text-sm font-medium glass-light hover:bg-white/10 transition-colors">
+                            Try again
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- JAVASCRIPT -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <script>
+    // ═══════════════════════════════════════════════════════
+    // State
+    // ═══════════════════════════════════════════════════════
+    const state = {
+        phase: 'input',     // input | clarify | running | done
+        product: '',
+        originalProduct: '',
+        clarificationQuestions: [],
+        clarificationAnswers: [],
+        clarifyRound: 0,
+        maxAttempts: 3,
+        preGraphTokens: [],
+        finalState: null,
+        attempts: [],
+        eventSource: null,  // SSE connection
+    };
+
+    // ═══════════════════════════════════════════════════════
+    // Phase Management
+    // ═══════════════════════════════════════════════════════
+    function setPhase(phase) {
+        state.phase = phase;
+        const phases = ['phaseInput', 'phaseClarify', 'phaseRunning', 'phaseDone', 'errorPanel'];
+        phases.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('phase-hidden');
+        });
+
+        const target = {
+            input: 'phaseInput',
+            clarify: 'phaseClarify',
+            running: 'phaseRunning',
+            done: 'phaseDone',
+            error: 'errorPanel',
+        }[phase];
+
+        if (target) {
+            const el = document.getElementById(target);
+            el.classList.remove('phase-hidden');
+            // Re-trigger animation
+            el.style.animation = 'none';
+            el.offsetHeight; // reflow
+            el.style.animation = '';
+        }
+
+        updateDebugPanel();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Init
+    // ═══════════════════════════════════════════════════════
+    async function init() {
+        try {
+            const res = await fetch('/api/config');
+            const cfg = await res.json();
+            state.maxAttempts = cfg.max_attempts;
+            document.getElementById('maxAttemptsSlider').value = cfg.max_attempts;
+            document.getElementById('maxAttemptsValue').textContent = cfg.max_attempts;
+
+            if (!cfg.has_api_key) {
+                document.getElementById('apiKeyError').classList.remove('hidden');
+                document.getElementById('submitBtn').disabled = true;
+            }
+
+            loadRecentRuns();
+        } catch (e) {
+            console.error('Failed to init:', e);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Sidebar
+    // ═══════════════════════════════════════════════════════
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('hidden');
+    }
+
+    function updateMaxAttempts(val) {
+        state.maxAttempts = parseInt(val);
+        document.getElementById('maxAttemptsValue').textContent = val;
+        fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ max_attempts: parseInt(val) }),
+        }).catch(e => console.error('Failed to update config:', e));
+    }
+
+    function toggleDebug() {
+        const panel = document.getElementById('debugPanel');
+        const chevron = document.getElementById('debugChevron');
+        panel.classList.toggle('hidden');
+        chevron.style.transform = panel.classList.contains('hidden') ? '' : 'rotate(180deg)';
+        updateDebugPanel();
+    }
+
+    function updateDebugPanel() {
+        const el = document.getElementById('debugContent');
+        if (!el) return;
+        el.textContent = JSON.stringify({
+            phase: state.phase,
+            product: state.product,
+            original_product: state.originalProduct,
+            clarification_questions: state.clarificationQuestions,
+            clarification_answers: state.clarificationAnswers,
+            clarify_round: state.clarifyRound,
+            n_attempts: state.attempts.length,
+        }, null, 2);
+    }
+
+    async function loadRecentRuns() {
+        try {
+            const res = await fetch('/api/history');
+            const data = await res.json();
+            renderRecentRuns(data.recent_runs || []);
+        } catch (e) {
+            console.error('Failed to load history:', e);
+        }
+    }
+
+    function renderRecentRuns(runs) {
+        const container = document.getElementById('recentRuns');
+        if (!runs.length) {
+            container.innerHTML = '<p class="text-xs text-gray-500 italic">No runs yet.</p>';
+            return;
+        }
+        container.innerHTML = [...runs].reverse().map(run => {
+            const icon = run.passed ? '✅' : '⚠️';
+            return `
+                <div class="glass-light rounded-lg px-3 py-2 text-xs">
+                    <span>${icon}</span>
+                    <span class="font-semibold text-white">${escapeHtml(run.product)}</span>
+                    <span class="text-gray-400 block mt-0.5">${escapeHtml(run.best_price)}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function resetSession() {
+        try {
+            await fetch('/api/reset', { method: 'POST' });
+            state.product = '';
+            state.originalProduct = '';
+            state.clarificationQuestions = [];
+            state.clarificationAnswers = [];
+            state.clarifyRound = 0;
+            state.preGraphTokens = [];
+            state.finalState = null;
+            state.attempts = [];
+            if (state.eventSource) {
+                state.eventSource.close();
+                state.eventSource = null;
+            }
+            document.getElementById('productInput').value = '';
+            setPhase('input');
+        } catch (e) {
+            console.error('Reset failed:', e);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // PHASE 1: INPUT — Submit Product
+    // ═══════════════════════════════════════════════════════
+    async function submitProduct() {
+        const input = document.getElementById('productInput');
+        const product = input.value.trim();
+        if (!product) return;
+
+        state.product = product;
+        state.originalProduct = product;
+        state.attempts = [];
+        state.finalState = null;
+        state.clarificationAnswers = [];
+        state.clarifyRound = 0;
+        state.preGraphTokens = [];
+
+        // Show loading state
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        document.getElementById('submitBtnText').classList.add('hidden');
+        document.getElementById('submitBtnSpinner').classList.remove('hidden');
+
+        try {
+            const res = await fetch('/api/clarify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product }),
+            });
+            const data = await res.json();
+
+            // Track clarifier tokens
+            if (data.token_usage) {
+                state.preGraphTokens.push(data.token_usage);
+            }
+
+            if (data.questions && data.questions.length > 0) {
+                state.clarificationQuestions = data.questions;
+                showClarifyPhase();
+            } else {
+                state.clarificationQuestions = [];
+                startAgentRun();
+            }
+        } catch (e) {
+            console.error('Clarify request failed:', e);
+            alert('Failed to check product. Please try again.');
+        } finally {
+            btn.disabled = false;
+            document.getElementById('submitBtnText').classList.remove('hidden');
+            document.getElementById('submitBtnSpinner').classList.add('hidden');
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // PHASE 2: CLARIFY
+    // ═══════════════════════════════════════════════════════
+    function showClarifyPhase() {
+        const banner = document.getElementById('clarifyBannerTitle');
+        const sub = document.getElementById('clarifyBannerSub');
+        const productDisplay = document.getElementById('clarifyProductName');
+
+        if (state.clarifyRound > 0) {
+            banner.textContent = `Still needs more detail (round ${state.clarifyRound + 1}).`;
+            sub.textContent = 'Please provide more specifics for the most accurate price.';
+            productDisplay.textContent = state.product;
+        } else {
+            banner.textContent = 'The product name is a bit ambiguous.';
+            sub.textContent = 'Please clarify for the most accurate price.';
+            productDisplay.textContent = state.originalProduct;
+        }
+
+        // Render question fields
+        const container = document.getElementById('clarifyQuestions');
+        container.innerHTML = state.clarificationQuestions.map((q, i) => `
+            <div class="animate-slide-up" style="animation-delay: ${i * 100}ms">
+                <label class="block text-sm font-semibold text-gray-300 mb-2">${i + 1}. ${escapeHtml(q)}</label>
+                <input type="text" id="clarifyAnswer_${i}"
+                       placeholder="Your answer here..."
+                       class="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white
+                              placeholder-gray-500 focus:outline-none focus:border-accent-cyan/50
+                              focus:ring-2 focus:ring-accent-cyan/20 transition-all duration-200 text-sm"
+                       onkeydown="if(event.key==='Enter')submitClarification(false)"/>
+            </div>
+        `).join('');
+
+        setPhase('clarify');
+    }
+
+    async function submitClarification(skip) {
+        const answers = state.clarificationQuestions.map((_, i) => {
+            const el = document.getElementById(`clarifyAnswer_${i}`);
+            return el ? el.value.trim() : '';
+        });
+        const filled = answers.filter(a => a);
+
+        if (skip) {
+            // Skip: use original product name
+            state.product = state.originalProduct;
+            state.clarificationAnswers = [];
+        } else {
+            if (!filled.length) {
+                // Show warning
+                const banner = document.getElementById('clarifyBannerTitle');
+                banner.textContent = '⚠️ Please fill in at least one answer, or click Skip.';
+                return;
+            }
+            // Smart merge
+            const btn = document.getElementById('clarifySubmitBtn');
+            btn.disabled = true;
+            btn.textContent = '🧠 Merging...';
+
+            try {
+                const res = await fetch('/api/merge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ original: state.product, answers: filled }),
+                });
+                const data = await res.json();
+                state.product = data.merged;
+                state.clarificationAnswers = filled;
+
+                if (data.token_usage) {
+                    state.preGraphTokens.push(data.token_usage);
+                }
+            } catch (e) {
+                console.error('Merge failed:', e);
+                state.product = `${state.originalProduct} ${filled.join(' ')}`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '✅ Continue';
+            }
+        }
+
+        // Multi-round: re-check if still ambiguous
+        state.clarifyRound++;
+
+        if (!skip && state.clarifyRound < 3) {
+            try {
+                const res = await fetch('/api/clarify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product: state.product }),
+                });
+                const data = await res.json();
+
+                if (data.token_usage) {
+                    state.preGraphTokens.push(data.token_usage);
+                }
+
+                if (data.questions && data.questions.length > 0) {
+                    state.clarificationQuestions = data.questions;
+                    showClarifyPhase();
+                    return;
+                }
+            } catch (e) {
+                console.error('Re-clarify failed:', e);
+            }
+        }
+
+        // Clarification complete — start the run
+        state.clarificationQuestions = [];
+        startAgentRun();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // PHASE 3: RUNNING — SSE Stream
+    // ═══════════════════════════════════════════════════════
+    function startAgentRun() {
+        setPhase('running');
+
+        // Set up running phase UI
+        document.getElementById('runningProductName').textContent = state.product;
+        document.getElementById('runningMaxAttempts').textContent = state.maxAttempts;
+
+        if (state.clarificationAnswers.length) {
+            const el = document.getElementById('runningClarifications');
+            el.textContent = `With clarifications: ${state.clarificationAnswers.join(', ')}`;
+            el.classList.remove('hidden');
+        } else {
+            document.getElementById('runningClarifications').classList.add('hidden');
+        }
+
+        // Reset live UI
+        document.getElementById('liveTokenBar').classList.add('hidden');
+        document.getElementById('liveActivityBar').classList.add('hidden');
+        document.getElementById('runningSpinner').classList.remove('hidden');
+        document.getElementById('liveAttempts').innerHTML = '';
+
+        // Build SSE URL
+        const params = new URLSearchParams({
+            product: state.product,
+            original_product: state.originalProduct,
+            pre_graph_tokens: JSON.stringify(state.preGraphTokens),
+        });
+
+        const eventSource = new EventSource(`/api/run?${params.toString()}`);
+        state.eventSource = eventSource;
+
+        eventSource.addEventListener('status', (e) => {
+            const data = JSON.parse(e.data);
+            document.getElementById('liveActivityBar').classList.remove('hidden');
+            document.getElementById('liveActivityText').innerHTML =
+                `<strong>Attempt ${data.attempt}/${data.max_attempts}</strong> &nbsp;│&nbsp; ${escapeHtml(data.message)}`;
+        });
+
+        eventSource.addEventListener('tokens', (e) => {
+            const data = JSON.parse(e.data);
+            const bar = document.getElementById('liveTokenBar');
+            bar.classList.remove('hidden');
+
+            animateNumber('liveTokenIn', data.input_tokens);
+            animateNumber('liveTokenOut', data.output_tokens);
+            animateNumber('liveTokenTotal', data.total_tokens);
+            animateNumber('liveLLMCalls', data.llm_calls);
+        });
+
+        eventSource.addEventListener('attempt', (e) => {
+            const data = JSON.parse(e.data);
+            state.attempts.push(data);
+            document.getElementById('runningSpinner').classList.add('hidden');
+            appendAttemptCard(data, true);
+            updateDebugPanel();
+        });
+
+        eventSource.addEventListener('done', (e) => {
+            const data = JSON.parse(e.data);
+            state.finalState = data.final_state;
+            state.attempts = data.attempts || state.attempts;
+
+            eventSource.close();
+            state.eventSource = null;
+
+            // Transition to done phase
+            showDonePhase();
+            loadRecentRuns();
+        });
+
+        eventSource.addEventListener('error', (e) => {
+            // Check if it's a custom error event vs connection error
+            if (e.data) {
+                const data = JSON.parse(e.data);
+                document.getElementById('errorMessage').textContent = data.error;
+                document.getElementById('errorTraceback').textContent = data.traceback || '';
+                setPhase('error');
+            }
+            eventSource.close();
+            state.eventSource = null;
+        });
+
+        eventSource.onerror = (e) => {
+            // Connection-level error (server stopped, network issue)
+            // Only handle if we haven't received a 'done' event
+            if (state.phase === 'running') {
+                console.error('SSE connection error:', e);
+                // Don't show error if we got attempts — the stream may just have ended
+                if (state.attempts.length > 0) {
+                    // Use last attempt as final state
+                    state.finalState = state.attempts[state.attempts.length - 1];
+                    showDonePhase();
+                    loadRecentRuns();
+                }
+            }
+            eventSource.close();
+            state.eventSource = null;
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // PHASE 4: DONE
+    // ═══════════════════════════════════════════════════════
+    function showDonePhase() {
+        setPhase('done');
+        const fs = state.finalState || {};
+        renderFinalResult(fs);
+        renderTokenMetrics(fs);
+        renderAttemptHistory();
+    }
+
+    function renderFinalResult(fs) {
+        const passed = (fs.eval_result || '').toUpperCase() === 'PASS';
+        const panel = document.getElementById('finalResultPanel');
+
+        const sources = fs.sources || [];
+        const reflections = fs.reflections || [];
+
+        const sourcesHtml = sources.map(s => {
+            if (typeof s !== 'object') return '';
+            const name = s.name || 'Unknown';
+            const price = s.price || 'N/A';
+            const url = s.url || '';
+            return `
+                <div class="source-card glass-light rounded-xl p-4">
+                    ${url
+                        ? `<a href="${escapeHtml(url)}" target="_blank" class="text-sm font-semibold text-accent-cyan hover:underline">${escapeHtml(name)}</a>`
+                        : `<span class="text-sm font-semibold text-white">${escapeHtml(name)}</span>`
+                    }
+                    <p class="text-xl font-bold text-white mt-1">${escapeHtml(price)}</p>
+                </div>
+            `;
+        }).join('');
+
+        const reflectionsHtml = reflections.length > 0 ? `
+            <div class="mt-6">
+                <button onclick="toggleAccordion('reflectionTrail')" class="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors w-full">
+                    <svg id="reflectionTrailChevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                    🔁 Reflection trail (${reflections.length} critiques)
+                </button>
+                <div id="reflectionTrail" class="accordion-content mt-3">
+                    <div class="glass-light rounded-xl p-4 space-y-2">
+                        ${reflections.map((r, i) => `
+                            <p class="text-sm text-gray-300"><span class="text-accent-purple font-bold">${i + 1}.</span> ${escapeHtml(r)}</p>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        ` : '';
+
+        panel.innerHTML = `
+            <!-- Status Banner -->
+            <div class="rounded-2xl p-1 mb-2" style="background: linear-gradient(135deg, ${passed ? '#059669, #10b981' : '#d97706, #f59e0b'});">
+                <div class="glass rounded-xl p-5">
+                    <h2 class="text-xl font-bold text-white">
+                        ${passed
+                            ? `✅ Best Price Found <span class="text-base font-normal text-gray-400">(verified on attempt ${fs.attempt || '?'})</span>`
+                            : `⚠️ Best-Effort Result <span class="text-base font-normal text-gray-400">(max attempts reached)</span>`
+                        }
+                    </h2>
+                </div>
+            </div>
+
+            <!-- Result Content -->
+            <div class="glass rounded-2xl p-6 mt-4">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Left: Product + Price -->
+                    <div class="lg:col-span-2">
+                        <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1">Product</p>
+                        <p class="text-lg font-semibold text-white mb-4">${escapeHtml(fs.product || 'N/A')}</p>
+
+                        <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1">💰 Best Price</p>
+                        <p class="text-3xl lg:text-4xl font-extrabold bg-clip-text text-transparent mb-3"
+                           style="background-image: linear-gradient(135deg, #06b6d4, #8b5cf6);">
+                            ${escapeHtml(fs.best_price || 'Could not determine')}
+                        </p>
+
+                        <p class="text-sm text-gray-300 font-medium mb-4">${escapeHtml(fs.price_summary || '')}</p>
+
+                        ${fs.reasoning ? `
+                        <button onclick="toggleAccordion('fullReasoning')" class="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors">
+                            <svg id="fullReasoningChevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                            💭 Full reasoning
+                        </button>
+                        <div id="fullReasoning" class="accordion-content mt-3">
+                            <div class="glass-light rounded-xl p-4">
+                                <p class="text-sm text-gray-300 whitespace-pre-wrap">${escapeHtml(fs.reasoning)}</p>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <!-- Right: Sources -->
+                    <div>
+                        ${sources.length > 0 ? `
+                        <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-3">🛒 Price Comparison</p>
+                        <div class="space-y-3">${sourcesHtml}</div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                ${reflectionsHtml}
+            </div>
+        `;
+    }
+
+    function renderTokenMetrics(fs) {
+        const tokenList = fs.token_usage || [];
+        if (!tokenList.length) {
+            document.getElementById('tokenMetrics').innerHTML = '';
+            return;
+        }
+
+        const totalIn = tokenList.reduce((s, t) => s + (t.input_tokens || 0), 0);
+        const totalOut = tokenList.reduce((s, t) => s + (t.output_tokens || 0), 0);
+        const totalAll = tokenList.reduce((s, t) => s + (t.total_tokens || 0), 0);
+
+        const nodeLabels = {
+            clarifier: '🤔 Clarifier',
+            actor_query: '🎯 Actor Query',
+            actor_verdict: '💰 Actor Verdict',
+            evaluator: '⚖️ Evaluator',
+            reflector: '🔁 Reflector',
+            smart_merge: '🧠 Smart Merge',
+        };
+
+        const rows = tokenList.map(t => {
+            const nodeName = nodeLabels[t.node] || t.node || 'unknown';
+            const attempt = t.attempt > 0 ? `#${t.attempt}` : '—';
+            return `
+                <tr class="border-b border-white/5 hover:bg-white/3">
+                    <td class="py-2 px-3 text-sm">${nodeName}</td>
+                    <td class="py-2 px-3 text-sm text-center text-gray-400">${attempt}</td>
+                    <td class="py-2 px-3 text-sm text-right font-mono">${(t.input_tokens || 0).toLocaleString()}</td>
+                    <td class="py-2 px-3 text-sm text-right font-mono">${(t.output_tokens || 0).toLocaleString()}</td>
+                    <td class="py-2 px-3 text-sm text-right font-mono font-semibold">${(t.total_tokens || 0).toLocaleString()}</td>
+                </tr>
+            `;
+        }).join('');
+
+        document.getElementById('tokenMetrics').innerHTML = `
+            <button onclick="toggleAccordion('tokenMetricsBody')" class="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors w-full">
+                <svg id="tokenMetricsBodyChevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+                📊 Token Metrics — ${totalAll.toLocaleString()} total tokens across ${tokenList.length} LLM calls
+            </button>
+            <div id="tokenMetricsBody" class="accordion-content mt-3">
+                <div class="glass rounded-2xl p-5">
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                        <div class="glass-light rounded-xl p-3 text-center">
+                            <p class="text-[10px] text-gray-500 uppercase tracking-wider">⬇️ Input</p>
+                            <p class="text-lg font-bold text-white mt-1">${totalIn.toLocaleString()}</p>
+                        </div>
+                        <div class="glass-light rounded-xl p-3 text-center">
+                            <p class="text-[10px] text-gray-500 uppercase tracking-wider">⬆️ Output</p>
+                            <p class="text-lg font-bold text-white mt-1">${totalOut.toLocaleString()}</p>
+                        </div>
+                        <div class="glass-light rounded-xl p-3 text-center">
+                            <p class="text-[10px] text-gray-500 uppercase tracking-wider">Σ Total</p>
+                            <p class="text-lg font-bold text-accent-cyan mt-1">${totalAll.toLocaleString()}</p>
+                        </div>
+                        <div class="glass-light rounded-xl p-3 text-center">
+                            <p class="text-[10px] text-gray-500 uppercase tracking-wider">🔄 LLM Calls</p>
+                            <p class="text-lg font-bold text-white mt-1">${tokenList.length}</p>
+                        </div>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-white/10 text-xs text-gray-500 uppercase tracking-wider">
+                                    <th class="py-2 px-3">Node</th>
+                                    <th class="py-2 px-3 text-center">Attempt</th>
+                                    <th class="py-2 px-3 text-right">Input</th>
+                                    <th class="py-2 px-3 text-right">Output</th>
+                                    <th class="py-2 px-3 text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                            <tfoot>
+                                <tr class="border-t border-white/10 font-bold text-white">
+                                    <td class="py-2 px-3 text-sm">TOTAL</td>
+                                    <td></td>
+                                    <td class="py-2 px-3 text-sm text-right font-mono">${totalIn.toLocaleString()}</td>
+                                    <td class="py-2 px-3 text-sm text-right font-mono">${totalOut.toLocaleString()}</td>
+                                    <td class="py-2 px-3 text-sm text-right font-mono">${totalAll.toLocaleString()}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderAttemptHistory() {
+        const container = document.getElementById('attemptHistory');
+        if (!state.attempts.length) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = `
+            <h3 class="text-lg font-bold text-white mb-4">📋 Attempt History</h3>
+            <div class="space-y-3">
+                ${state.attempts.map((a, i) => buildAttemptCardHtml(a, false)).join('')}
+            </div>
+        `;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Attempt Card Builder
+    // ═══════════════════════════════════════════════════════
+    function buildAttemptCardHtml(data, expanded) {
+        const n = data.attempt || '?';
+        const passed = (data.eval_result || '').toUpperCase() === 'PASS';
+        const statusIcon = passed ? '✅' : '❌';
+        const statusText = passed ? 'PASS' : 'FAIL';
+        const badgeClass = passed ? 'badge-pass' : 'badge-fail';
+        const id = `attempt_${n}_${Math.random().toString(36).substr(2, 6)}`;
+
+        const sources = (data.sources || []).map(s => {
+            if (typeof s !== 'object') return '';
+            const name = s.name || 'Unknown';
+            const price = s.price || 'N/A';
+            const url = s.url || '';
+            return url
+                ? `<li class="text-sm"><a href="${escapeHtml(url)}" target="_blank" class="text-accent-cyan hover:underline">${escapeHtml(name)}</a> — <strong>${escapeHtml(price)}</strong></li>`
+                : `<li class="text-sm">${escapeHtml(name)} — <strong>${escapeHtml(price)}</strong></li>`;
+        }).join('');
+
+        return `
+            <div class="glass rounded-xl overflow-hidden animate-slide-up">
+                <button onclick="toggleAccordion('${id}')" class="w-full px-5 py-3.5 flex items-center justify-between hover:bg-white/3 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="text-lg">${statusIcon}</span>
+                        <span class="text-sm font-semibold text-white">Attempt ${n}</span>
+                        <span class="${badgeClass} text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">${statusText}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-400">${escapeHtml(data.best_price || 'N/A')}</span>
+                        <svg id="${id}Chevron" class="w-4 h-4 text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </button>
+                <div id="${id}" class="accordion-content ${expanded ? 'open' : ''}" ${expanded ? 'style="max-height:2000px"' : ''}>
+                    <div class="px-5 pb-4 pt-1">
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div class="lg:col-span-2 space-y-2">
+                                <p class="text-sm"><span class="text-gray-500">🔍 Search query:</span> <code class="bg-black/30 px-1.5 py-0.5 rounded text-xs text-gray-300">${escapeHtml(data.search_query || 'N/A')}</code></p>
+                                <p class="text-sm"><span class="text-gray-500">💰 Best price:</span> <strong class="text-white">${escapeHtml(data.best_price || 'N/A')}</strong></p>
+                                <p class="text-sm"><span class="text-gray-500">📝 Summary:</span> ${escapeHtml(data.price_summary || 'N/A')}</p>
+                                ${data.reasoning ? `
+                                <div class="mt-2">
+                                    <button onclick="toggleAccordion('${id}_reasoning')" class="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1">
+                                        <svg id="${id}_reasoningChevron" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                        </svg>
+                                        💭 Reasoning
+                                    </button>
+                                    <div id="${id}_reasoning" class="accordion-content mt-2">
+                                        <p class="text-xs text-gray-400 bg-black/20 rounded-lg p-3 whitespace-pre-wrap">${escapeHtml(data.reasoning || '')}</p>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                            <div>
+                                <div class="glass-light rounded-xl p-3 text-center mb-3">
+                                    <p class="text-[10px] text-gray-500 uppercase">Results Found</p>
+                                    <p class="text-2xl font-bold text-white">${(data.search_results || []).length || '—'}</p>
+                                </div>
+                                <div class="rounded-xl p-3 ${passed ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}">
+                                    <p class="text-xs font-bold ${passed ? 'text-green-400' : 'text-red-400'} mb-1">${statusText}</p>
+                                    <p class="text-xs ${passed ? 'text-green-300/80' : 'text-red-300/80'}">${escapeHtml(data.eval_reason || '')}</p>
+                                </div>
+                            </div>
+                        </div>
+                        ${sources ? `
+                        <div class="mt-4">
+                            <p class="text-xs text-gray-500 font-medium mb-2">🛒 Sources:</p>
+                            <ul class="space-y-1 text-gray-300">${sources}</ul>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function appendAttemptCard(data, expanded) {
+        const container = document.getElementById('liveAttempts');
+        container.insertAdjacentHTML('beforeend', buildAttemptCardHtml(data, expanded));
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Search Another
+    // ═══════════════════════════════════════════════════════
+    function searchAnother() {
+        state.product = '';
+        state.originalProduct = '';
+        state.clarificationQuestions = [];
+        state.clarificationAnswers = [];
+        state.clarifyRound = 0;
+        state.preGraphTokens = [];
+        state.finalState = null;
+        state.attempts = [];
+        document.getElementById('productInput').value = '';
+        setPhase('input');
+        document.getElementById('productInput').focus();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Utilities
+    // ═══════════════════════════════════════════════════════
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    }
+
+    function toggleAccordion(id) {
+        const el = document.getElementById(id);
+        const chevron = document.getElementById(id + 'Chevron');
+        if (!el) return;
+
+        if (el.classList.contains('open')) {
+            el.style.maxHeight = '0px';
+            el.classList.remove('open');
+            if (chevron) chevron.style.transform = '';
+        } else {
+            el.style.maxHeight = el.scrollHeight + 'px';
+            el.classList.add('open');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        }
+    }
+
+    function toggleErrorTrace() {
+        const el = document.getElementById('errorTraceback');
+        const chevron = document.getElementById('errorTraceChevron');
+        el.classList.toggle('hidden');
+        chevron.style.transform = el.classList.contains('hidden') ? '' : 'rotate(180deg)';
+    }
+
+    function animateNumber(elementId, value) {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        el.textContent = value.toLocaleString();
+        el.classList.remove('token-flash');
+        el.offsetHeight; // reflow
+        el.classList.add('token-flash');
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Initialize on page load
+    // ═══════════════════════════════════════════════════════
+    init();
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ name: adding-langgraph-nodes
 description: |
   How to add a new LangGraph node to the reflexion loop.
   Covers the node function signature, state updates, token tracking,
-  wiring in graph.py, and updating the Streamlit live feed.
+  wiring in graph.py, and updating the live feed in server.py + static/index.html.
   Use this skill when adding new capabilities to the agent pipeline.
 ---
 
@@ -84,26 +84,33 @@ def build_graph() -> StateGraph:
     return graph.compile()
 ```
 
-### 4. Update the Live Feed (app.py)
+### 4. Update the Live Feed (server.py + static/index.html)
 
-Add a status line for your node in `_render_live_activity_feed()`:
+**Backend — `_get_activity_status()` in `server.py`:**
+
+Add a status entry for your node in the if/elif chain:
 
 ```python
 elif not state.get("my_new_field"):
-    status_text = "🆕 **MyNode:** Processing..."
+    step = "my_new_node"
+    message = "🆕 MyNode: Processing..."
 ```
 
-Insert it in the correct position in the if/elif chain to match the graph execution order.
+Insert it in the correct position to match the graph execution order.
 
-### 5. Update the Token Metrics Label (app.py)
+**Frontend — `static/index.html`:**
 
-Add a display name in `_render_token_metrics()`:
+No frontend changes needed for the live feed — the status bar automatically renders whatever message the SSE `status` event provides.
 
-```python
-node_labels = {
-    # ... existing labels ...
-    "my_new_node": "🆕 My New Node",
-}
+### 5. Update the Token Metrics Label (static/index.html)
+
+Add a display name in the `nodeLabels` object in the `renderTokenMetrics()` function:
+
+```javascript
+const nodeLabels = {
+    // ... existing labels ...
+    my_new_node: '🆕 My New Node',
+};
 ```
 
 ## Common Patterns

@@ -8,7 +8,7 @@ This is a **Price Check Reflexion Agent** — a LangGraph-based AI agent that fi
 - **State is typed.** All state fields must be declared in `state.py` (`AgentState` TypedDict). Never add ad-hoc keys to the state dict without updating the schema.
 - **Reducer fields use `Annotated[list, operator.add]`.** `reflections` and `token_usage` are append-only. Return `[item]` (a single-element list) from nodes — the reducer accumulates automatically.
 - **Graph topology lives in `graph.py` only.** Node functions live in `agent.py`. Routing logic lives in `graph.py`. Do not mix.
-- **Config is centralized in `config.py`.** All env vars and tunable constants live here. `app.py` may mutate `config.MAX_ATTEMPTS` at runtime via the sidebar slider.
+- **Config is centralized in `config.py`.** All env vars and tunable constants live here. `server.py` may mutate `config.MAX_ATTEMPTS` at runtime via the `POST /api/config` endpoint (triggered by the sidebar slider).
 
 ## Coding Conventions
 - **Python 3.11+** with `from __future__ import annotations`.
@@ -17,10 +17,14 @@ This is a **Price Check Reflexion Agent** — a LangGraph-based AI agent that fi
 - **JSON parsing:** Always use `_parse_json()` in `agent.py` for best-effort extraction from LLM output.
 - **Prompt structure:** Each node's prompt is a single f-string. Keep prompts self-contained — don't import prompt fragments from other files.
 
-## UI Rules (Streamlit — `app.py`)
-- **Phase machine:** The UI has 4 phases: `input → clarify → running → done`. State transitions use `st.session_state.phase` and `st.rerun()`.
-- **No raw HTML in Streamlit.** Use native Streamlit components (`st.info`, `st.progress`, `st.markdown`, `st.expander`). Streamlit's markdown renderer breaks on indented HTML strings.
-- **Live updates are one-liners.** The `_render_live_activity_feed()` function outputs a single `st.markdown()` line showing the current step. Keep it minimal.
+## UI Architecture (FastAPI + HTML/Tailwind)
+- **Backend entrypoint:** `server.py` (FastAPI). Run with `uvicorn server:app --reload --port 8000`.
+- **Frontend:** `static/index.html` — single-page app using Tailwind CSS v3 (CDN) and vanilla JavaScript.
+- **Phase machine:** The UI has 4 phases: `input → clarify → running → done`. Phase transitions are managed by the JS `state.phase` variable and `setPhase()` function.
+- **Live streaming uses SSE (Server-Sent Events).** The `GET /api/run` endpoint streams `status`, `tokens`, `attempt`, and `done` events. The frontend consumes these via `EventSource`.
+- **Session state** is held in-memory in `server.py` (Python dict) for backend state, and in the JS `state` object for frontend state.
+- **Sidebar slider** sends `POST /api/config` to update `config.MAX_ATTEMPTS` at runtime.
+- **Legacy Streamlit UI** (`app.py`) is kept for reference but is no longer the primary entrypoint.
 
 ## MCP Rules
 - **Transport:** Always `stdio`. The client spawns the server as a subprocess.
@@ -31,4 +35,5 @@ This is a **Price Check Reflexion Agent** — a LangGraph-based AI agent that fi
 ## Testing & Verification
 - **Syntax check:** `python -m py_compile <file>.py` before any PR.
 - **MCP tool test:** `python -c "from mcp_server import verify_merchant_authority; print(verify_merchant_authority('https://example.com/'))"` for quick verification.
-- **Streamlit:** `streamlit run app.py` — test with both specific products ("Sony WH-1000XM5") and ambiguous ones ("power bank") to verify the clarifier.
+- **FastAPI server:** `uvicorn server:app --reload --port 8000` — open `http://localhost:8000` and test with both specific products ("Sony WH-1000XM5") and ambiguous ones ("power bank") to verify the clarifier.
+- **API endpoint test:** `curl http://localhost:8000/api/config` to verify the server is running.

@@ -136,7 +136,7 @@ def my_new_tool_sync(param1: str, param2: int = 10) -> dict:
         return asyncio.run(_call_my_new_tool(param1, param2))
 ```
 
-**Key pattern:** The `ThreadPoolExecutor` fallback is required because Streamlit runs its own event loop.
+**Key pattern:** Uses asyncio + ThreadPoolExecutor for event loop compatibility, which is required because the calling context (FastAPI or any async framework) may already have a running event loop. In `server.py`, synchronous graph calls are run via `loop.run_in_executor()`, and MCP client calls within those threads use this same pattern.
 
 ### Step 4: Import and use in `agent.py`
 

@@ -21,7 +21,7 @@ All prompts are embedded as f-strings inside their respective node functions in 
 | Actor Verdict | `actor_verdict_node()` | ~253-285 | Extract prices from search results |
 | Evaluator | `evaluator_node()` | ~367-394 | Judge evidence quality against rubric |
 | Reflector | `reflector_node()` | ~429-454 | Generate critique for failed attempts |
-| Smart Merge | `_smart_merge_product()` in `app.py` | ~282-292 | Merge product name + clarification answers |
+| Smart Merge | `_smart_merge_product()` in `server.py` | ~111-125 | Merge product name + clarification answers |
 
 ## Clarifier Prompt
 
