@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import queue
 import sys
 import traceback
 from typing import Any
@@ -351,17 +352,38 @@ async def run_agent(request: Request):
         logger.info(f"🎬 SSE: Starting agent run for: {product!r}")
 
         try:
-            # Run graph.stream in a thread since it's synchronous
+            # Use a thread-safe queue to bridge sync graph.stream()
+            # with the async SSE generator — events stream in real-time
+            # instead of being collected by list() first.
+            _SENTINEL = object()
+            event_queue: queue.Queue = queue.Queue()
+
             def _stream_graph():
-                return list(graph.stream(
-                    initial_state,
-                    stream_mode="values",
-                    config=get_langfuse_config(f"PriceCheck: {product}"),
-                ))
+                try:
+                    for ev in graph.stream(
+                        initial_state,
+                        stream_mode="values",
+                        config=get_langfuse_config(f"PriceCheck: {product}"),
+                    ):
+                        event_queue.put(ev)
+                except Exception as exc:
+                    event_queue.put(exc)
+                finally:
+                    event_queue.put(_SENTINEL)
 
-            events = await loop.run_in_executor(None, _stream_graph)
+            loop.run_in_executor(None, _stream_graph)
 
-            for event in events:
+            while True:
+                # Wait for next event from the graph thread
+                raw = await loop.run_in_executor(None, event_queue.get)
+
+                if raw is _SENTINEL:
+                    break
+                if isinstance(raw, Exception):
+                    raise raw
+
+                event = raw
+
                 # Check if client disconnected
                 if await request.is_disconnected():
                     logger.info("Client disconnected, stopping SSE stream")
@@ -411,10 +433,18 @@ async def run_agent(request: Request):
                 if eval_is_fresh:
                     snapshot = final_state.copy()
                     # Remove search_results from snapshot (too large for SSE)
+                    # but send the count so the UI can display it
                     snapshot_clean = {
                         k: v for k, v in snapshot.items()
                         if k != "search_results"
                     }
+                    snapshot_clean["search_results_count"] = len(
+                        snapshot.get("search_results", [])
+                    )
+                    snapshot_clean["raw_search_results"] = [
+                        {"title": r.get("title", ""), "url": r.get("url", "")}
+                        for r in snapshot.get("search_results", [])
+                    ]
                     attempts_local.append(snapshot)
                     last_printed_attempt = current_attempt
                     last_eval_reason = current_eval_reason
@@ -449,6 +479,9 @@ async def run_agent(request: Request):
             k: v for k, v in final_state.items()
             if k != "search_results"
         }
+        final_clean["search_results_count"] = len(
+            final_state.get("search_results", [])
+        )
         # Save to session
         session_state["final_state"] = final_state
         session_state["attempts"] = attempts_local
@@ -468,7 +501,9 @@ async def run_agent(request: Request):
             "data": json.dumps({
                 "final_state": final_clean,
                 "attempts": [
-                    {k: v for k, v in a.items() if k != "search_results"}
+                    {**{k: v for k, v in a.items() if k != "search_results"},
+                     "search_results_count": len(a.get("search_results", [])),
+                     "raw_search_results": [{"title": r.get("title", ""), "url": r.get("url", "")} for r in a.get("search_results", [])]}
                     for a in attempts_local
                 ],
             }, default=str),

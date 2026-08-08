@@ -205,3 +205,18 @@ function escapeHtml(text) {
 - **Tailwind CSS v3** via CDN (no build step)
 - **Inter font** from Google Fonts
 - All animations defined in Tailwind config `extend.animation` and `extend.keyframes`
+
+### Nested Accordion Pattern
+When using CSS `max-height` transitions for accordions, opening a nested accordion will cause it to be clipped by the parent's fixed `max-height`. To fix this, use a `setTimeout` matching the CSS transition duration to remove the `max-height` constraint after opening:
+```javascript
+if (el.classList.contains('open')) {
+    el.style.maxHeight = el.scrollHeight + 'px'; // Re-apply before collapsing
+    void el.offsetHeight; // Force reflow
+    el.style.maxHeight = '0px';
+    el.classList.remove('open');
+} else {
+    el.style.maxHeight = el.scrollHeight + 'px';
+    el.classList.add('open');
+    setTimeout(() => { if (el.classList.contains('open')) el.style.maxHeight = 'none'; }, 350);
+}
+```

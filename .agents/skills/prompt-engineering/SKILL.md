@@ -65,6 +65,8 @@ All prompts are embedded as f-strings inside their respective node functions in 
 **Key rules:**
 - Only INR prices (₹ format)
 - Sources must have actual numeric prices (not "N/A" or "No price available")
+- Price must be explicitly attached to the EXACT product requested IN THE SAME SNIPPET.
+- CRITICAL: Do NOT hallucinate prices or mix-and-match prices between sources (e.g., grabbing a price from an ad and assigning it to the organic result).
 - Distinguish new vs refurbished/open-box condition
 - Empty sources list if no valid prices found
 
@@ -93,7 +95,7 @@ All prompts are embedded as f-strings inside their respective node functions in 
 4. Sources are Indian retailers or official brand sites
 5. Condition distinguished (new vs refurbished)
 6. `best_price` claim supported by numbers
-7. **Product drift check:** refined product must be a valid refinement of original query (not a different product)
+7. **Product drift check:** refined product must be a valid refinement of original query. MUST also cross-reference the `name` and `url` of the provided sources to detect hidden product variants (e.g. `boat-rockerz-450r` when asked for `450`).
 
 **MCP Verification Block:** When `len(sources) == 1`, the evaluator calls `verify_merchant()` and injects an `[🔍 ALGORITHMIC MERCHANT VERIFICATION REPORT]` into the prompt if the source scores `>= 0.8`. This allows the LLM judge to PASS on a single verified authoritative source.
 
